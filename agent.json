@@ -1,0 +1,19 @@
+{
+  "name": "douyin-content-agent",
+  "display_name": "抖音内容增长智能体",
+  "version": "1.0.0",
+  "entrypoint": "scripts/start_agent.py",
+  "local_url": "http://127.0.0.1:8787/",
+  "capabilities": [
+    "按抖音博主主页链接抓取公开作品",
+    "基于作品库生成复盘、标题、封面、文案优化建议",
+    "生成未来 7 天发布规划",
+    "生成涨粉与信任感建设操作清单",
+    "爆款短视频拆解与归档复用"
+  ],
+  "cross_platform": {
+    "macOS": "支持网页抓取；安装抖音桌面 App 后可使用已登录 App 辅助抓取",
+    "Windows": "支持网页抓取和本地工作台",
+    "Linux": "支持网页抓取和本地工作台"
+  }
+}

@@ -1,0 +1,2421 @@
+import json
+import subprocess
+import sys
+from datetime import datetime
+from pathlib import Path
+
+from build_strategy_dashboard import (
+    DATA_PATH,
+    ROOT,
+    build_rows,
+    json_for_html,
+)
+
+
+OUT_DIR = ROOT / "output" / "workflow_app"
+OUT_FILE = OUT_DIR / "index.html"
+DANAO_PATH = ROOT / "data" / "danao_knowledge.json"
+
+
+def load_danao():
+    if not DANAO_PATH.exists():
+        return {
+            "updatedAt": "",
+            "sourceCount": 0,
+            "sources": [],
+            "modules": [],
+            "workflowRules": [],
+        }
+    try:
+        data = json.loads(DANAO_PATH.read_text(encoding="utf-8"))
+        for source in data.get("sources", []):
+            source.pop("snippet", None)
+        return data
+    except json.JSONDecodeError:
+        return {
+            "updatedAt": "",
+            "sourceCount": 0,
+            "sources": [],
+            "modules": [],
+            "workflowRules": [],
+        }
+
+
+def render(rows):
+    data = {
+        "videos": rows,
+        "generatedAt": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "pillars": [
+            "追星心理/理想自我",
+            "边界感/反讨好",
+            "女性成长/自我觉醒",
+            "情绪管理/内核稳定",
+            "行动力/破碎重建",
+            "文学哲思/独处",
+        ],
+        "painPoints": [
+            "讨好别人却丢了自己",
+            "太敏感导致情绪内耗",
+            "追星背后的理想自我投射",
+            "不敢改变的人生停滞",
+            "关系里没有边界感",
+            "清醒但做不到行动",
+            "破碎后如何重新开始",
+            "把自己活成别人期待的样子",
+        ],
+        "danao": load_danao(),
+    }
+
+    return f"""<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI 超级个体工作台 · AI 超级个体内容管理</title>
+  <style>
+    :root {{
+      --bg:#070b16; --panel:rgba(13,20,36,.78); --panel-strong:rgba(18,28,50,.92);
+      --ink:#edf6ff; --muted:#91a3ba; --line:rgba(140,170,220,.20);
+      --blue:#4f7bff; --cyan:#22d3ee; --green:#34d399; --rose:#fb5f87; --amber:#f6c453; --violet:#9b7cff;
+      --home:#22d3ee; --library:#4f7bff; --optimizer:#fb5f87; --viral:#ff7aa8; --ideas:#a78bfa; --planner:#34d399; --update:#f6c453;
+      --active:var(--home); --active-soft:rgba(34,211,238,.14); --active-line:rgba(34,211,238,.34);
+      --glow:0 0 36px rgba(34,211,238,.18), 0 18px 80px rgba(0,0,0,.38);
+    }}
+    * {{ box-sizing:border-box; }}
+    body {{
+      margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",sans-serif;
+      background:
+        radial-gradient(circle at 20% -10%, rgba(79,123,255,.36), transparent 34%),
+        radial-gradient(circle at 84% 8%, rgba(34,211,238,.22), transparent 28%),
+        linear-gradient(145deg,#050812 0%,#0b1020 48%,#070b16 100%);
+      color:var(--ink);
+    }}
+    body:before {{
+      content:""; position:fixed; inset:0; pointer-events:none; opacity:.42;
+      background-image:linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px);
+      background-size:32px 32px;
+      mask-image:linear-gradient(to bottom, black, transparent 82%);
+    }}
+    body[data-view="home"] {{ --active:var(--home); --active-soft:rgba(34,211,238,.14); --active-line:rgba(34,211,238,.34); }}
+    body[data-view="library"] {{ --active:var(--library); --active-soft:rgba(79,123,255,.15); --active-line:rgba(79,123,255,.38); }}
+    body[data-view="optimizer"] {{ --active:var(--optimizer); --active-soft:rgba(251,95,135,.14); --active-line:rgba(251,95,135,.38); }}
+    body[data-view="viral"] {{ --active:var(--viral); --active-soft:rgba(255,122,168,.15); --active-line:rgba(255,122,168,.40); }}
+    body[data-view="ideas"] {{ --active:var(--ideas); --active-soft:rgba(167,139,250,.15); --active-line:rgba(167,139,250,.38); }}
+    body[data-view="planner"] {{ --active:var(--planner); --active-soft:rgba(52,211,153,.13); --active-line:rgba(52,211,153,.36); }}
+    body[data-view="update"] {{ --active:var(--update); --active-soft:rgba(246,196,83,.14); --active-line:rgba(246,196,83,.38); }}
+    .app {{ display:grid; grid-template-columns:288px minmax(0,1fr); min-height:100vh; position:relative; }}
+    aside {{
+      background:linear-gradient(180deg, rgba(11,17,31,.94), rgba(8,12,22,.82));
+      color:#eaf0f7; padding:24px 16px; position:sticky; top:0; height:100vh;
+      border-right:1px solid var(--line); box-shadow:18px 0 70px rgba(0,0,0,.24); backdrop-filter:blur(18px);
+    }}
+    .brand {{ font-size:22px; font-weight:900; margin-bottom:6px; letter-spacing:.02em; }}
+    .brand:after {{ content:""; display:block; width:54px; height:3px; margin-top:12px; border-radius:99px; background:linear-gradient(90deg,var(--cyan),var(--blue),var(--violet)); box-shadow:0 0 18px rgba(34,211,238,.6); }}
+    .aside-note {{ color:#9dadbd; font-size:13px; line-height:1.6; margin:18px 0 24px; }}
+    nav button {{
+      --nav-color:var(--cyan); width:100%; text-align:left; margin:6px 0; background:transparent; color:#cdd9e7; border:1px solid transparent;
+      border-radius:10px; padding:12px 13px; cursor:pointer; font-size:14px; transition:.18s ease; display:flex; align-items:center; gap:10px;
+    }}
+    nav button:before {{ content:""; width:9px; height:9px; border-radius:50%; background:var(--nav-color); box-shadow:0 0 16px var(--nav-color); flex:0 0 auto; }}
+    nav button[data-view="home"] {{ --nav-color:var(--home); }}
+    nav button[data-view="library"] {{ --nav-color:var(--library); }}
+    nav button[data-view="optimizer"] {{ --nav-color:var(--optimizer); }}
+    nav button[data-view="viral"] {{ --nav-color:var(--viral); }}
+    nav button[data-view="ideas"] {{ --nav-color:var(--ideas); }}
+    nav button[data-view="planner"] {{ --nav-color:var(--planner); }}
+    nav button[data-view="update"] {{ --nav-color:var(--update); }}
+    nav button:hover {{ border-color:var(--active-line); background:var(--active-soft); }}
+    nav button.active {{ background:linear-gradient(90deg, var(--active-soft), rgba(255,255,255,.035)); color:#fff; border-color:var(--active-line); box-shadow:inset 0 0 24px var(--active-soft); }}
+    main {{ padding:28px 32px 46px; position:relative; }}
+    header {{
+      display:flex; align-items:flex-start; justify-content:space-between; gap:18px; margin-bottom:20px;
+      padding:22px; border:1px solid var(--active-line); border-radius:18px; background:linear-gradient(135deg, var(--active-soft), rgba(14,23,42,.76) 42%, rgba(11,18,34,.58)); box-shadow:var(--glow);
+    }}
+    h1 {{ margin:0; font-size:32px; letter-spacing:0; line-height:1.15; }}
+    .sub {{ color:var(--muted); line-height:1.7; margin:10px 0 0; max-width:880px; }}
+    .status-pill {{
+      background:var(--active-soft); color:#f3fbff; border:1px solid var(--active-line);
+      border-radius:999px; padding:9px 13px; font-size:13px; white-space:nowrap; box-shadow:0 0 24px var(--active-soft);
+    }}
+    .view {{ display:none; }}
+    .view.active {{ display:block; }}
+    .grid {{ display:grid; gap:14px; }}
+    .kpis {{ grid-template-columns:repeat(4,minmax(0,1fr)); margin-bottom:18px; }}
+    .panel {{
+      background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:18px;
+      box-shadow:0 18px 70px rgba(0,0,0,.22); backdrop-filter:blur(18px);
+    }}
+    .view.active > .panel, .view.active > .grid > .panel {{ border-color:var(--active-line); }}
+    .module-label {{ display:inline-flex; align-items:center; gap:8px; margin:0 0 10px; color:#dfeaff; font-size:12px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }}
+    .module-label:before {{ content:""; width:22px; height:3px; border-radius:99px; background:var(--active); box-shadow:0 0 18px var(--active); }}
+    .kpi {{ position:relative; overflow:hidden; }}
+    .kpi:before {{ content:""; position:absolute; inset:0 0 auto 0; height:3px; background:var(--kpi-color, var(--cyan)); opacity:.95; }}
+    .kpi-total {{ --kpi-color:var(--library); }}
+    .kpi-avg {{ --kpi-color:var(--planner); }}
+    .kpi-best {{ --kpi-color:var(--ideas); }}
+    .kpi-need {{ --kpi-color:var(--optimizer); }}
+    .kpi b {{ display:block; font-size:32px; margin-bottom:4px; color:#fff; }}
+    .kpi span, .muted {{ color:var(--muted); font-size:13px; line-height:1.55; }}
+    .kpi-action {{ margin-top:12px; width:100%; border-radius:10px; padding:9px 10px; cursor:pointer; color:#fff; font-weight:800; border:1px solid rgba(251,95,135,.45); background:linear-gradient(135deg, rgba(251,95,135,.75), rgba(167,139,250,.58)); box-shadow:0 0 22px rgba(251,95,135,.18); }}
+    .kpi-action:hover {{ transform:translateY(-1px); filter:saturate(1.08); }}
+    .toolbar {{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin:12px 0 16px; }}
+    input, textarea, select {{ width:100%; border:1px solid var(--line); border-radius:10px; padding:11px 12px; background:rgba(6,10,20,.72); color:var(--ink); font:inherit; outline:none; }}
+    input:focus, textarea:focus, select:focus {{ border-color:rgba(34,211,238,.58); box-shadow:0 0 0 3px rgba(34,211,238,.12); }}
+    option {{ background:#101827; color:#edf6ff; }}
+    textarea {{ min-height:150px; resize:vertical; line-height:1.65; }}
+    .small-input {{ max-width:260px; }}
+    button.primary {{ background:linear-gradient(135deg,var(--active),var(--blue)); color:#fff; border:1px solid var(--active-line); border-radius:10px; padding:10px 14px; cursor:pointer; box-shadow:0 0 22px var(--active-soft); }}
+    button.secondary {{ background:rgba(255,255,255,.06); color:var(--ink); border:1px solid var(--line); border-radius:10px; padding:10px 14px; cursor:pointer; }}
+    button.primary:disabled, button.secondary:disabled {{ opacity:.48; cursor:not-allowed; transform:none; }}
+    button.secondary.active-filter {{ border-color:rgba(251,95,135,.55); background:rgba(251,95,135,.16); color:#ffdbe5; box-shadow:0 0 20px rgba(251,95,135,.12); }}
+    button.primary:hover, button.secondary:hover {{ transform:translateY(-1px); }}
+    .videos {{ grid-template-columns:repeat(2,minmax(0,1fr)); }}
+    .video {{ border-top:4px solid var(--theme-color, var(--blue)); }}
+    .video.theme-star {{ --theme-color:var(--amber); }}
+    .video.theme-boundary {{ --theme-color:var(--optimizer); }}
+    .video.theme-growth {{ --theme-color:var(--planner); }}
+    .video.theme-emotion {{ --theme-color:var(--cyan); }}
+    .video.theme-action {{ --theme-color:var(--blue); }}
+    .video.theme-literary {{ --theme-color:var(--ideas); }}
+    .video.warn {{ border-top-color:var(--amber); }}
+    .video.low {{ border-top-color:var(--rose); }}
+    .row {{ display:flex; justify-content:space-between; gap:12px; align-items:flex-start; }}
+    h2 {{ margin:0 0 12px; font-size:20px; }}
+    h3 {{ margin:0; font-size:16px; line-height:1.45; }}
+    .score {{ min-width:48px; height:48px; display:grid; place-items:center; border-radius:50%; background:rgba(79,123,255,.14); color:#bcd0ff; border:1px solid rgba(79,123,255,.35); font-weight:900; box-shadow:0 0 24px rgba(79,123,255,.18); }}
+    .chips {{ display:flex; flex-wrap:wrap; gap:7px; margin:12px 0; }}
+    .chip {{ font-size:12px; padding:5px 9px; border-radius:99px; background:rgba(145,163,186,.13); color:#c8d5e3; border:1px solid rgba(145,163,186,.16); }}
+    .theme-chip {{ background:rgba(255,255,255,.06); border-color:var(--theme-color, var(--line)); color:#fff; }}
+    .cover {{ background:rgba(251,95,135,.10); border:1px dashed rgba(251,95,135,.38); color:#ffadc1; padding:11px; border-radius:10px; font-weight:800; }}
+    .stats-grid {{ display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:8px; margin:12px 0; }}
+    .stat-pill {{ border:1px solid var(--line); border-radius:10px; padding:9px 8px; background:rgba(255,255,255,.045); }}
+    .stat-pill b {{ display:block; font-size:16px; color:#fff; margin-bottom:2px; }}
+    .stat-pill span {{ color:var(--muted); font-size:12px; }}
+    .review-sections {{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; margin-top:12px; }}
+    .review-tip {{ border:1px solid var(--line); border-radius:12px; padding:11px; background:rgba(255,255,255,.04); line-height:1.6; }}
+    .review-tip b {{ color:var(--active); }}
+    details.transcript-box {{ margin-top:12px; border:1px solid var(--line); border-radius:12px; background:rgba(6,10,20,.42); overflow:hidden; }}
+    details.transcript-box summary {{ cursor:pointer; padding:11px 12px; color:#fff; font-weight:800; }}
+    .transcript-content {{ padding:0 12px 12px; color:#d9e5f3; max-height:220px; overflow:auto; white-space:pre-wrap; line-height:1.75; font-size:13px; }}
+    .cover-trends {{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin-top:12px; }}
+    .cover-example {{ border:1px solid var(--line); border-radius:14px; overflow:hidden; background:rgba(255,255,255,.045); }}
+    .cover-example img {{ width:100%; aspect-ratio:3/4; object-fit:cover; display:block; background:#0b1120; }}
+    .cover-example-body {{ padding:10px; display:grid; gap:6px; }}
+    .cover-example-title {{ font-size:13px; line-height:1.45; color:#fff; font-weight:800; }}
+    .cover-example-meta {{ color:var(--muted); font-size:12px; line-height:1.45; }}
+    .actions {{ display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }}
+    .split {{ grid-template-columns:1fr 1fr; }}
+    .three {{ grid-template-columns:repeat(3,minmax(0,1fr)); }}
+    .result-list {{ display:grid; gap:10px; margin-top:12px; }}
+    .result {{ border:1px solid var(--line); background:rgba(255,255,255,.045); border-radius:12px; padding:13px; line-height:1.65; }}
+    .danao-ref {{ border-color:rgba(34,211,238,.34); background:linear-gradient(135deg, rgba(34,211,238,.10), rgba(167,139,250,.08)); }}
+    .result b {{ color:var(--active); }}
+    .formula-grid {{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }}
+    .formula-card {{ border:1px solid var(--line); background:rgba(255,255,255,.045); border-radius:12px; padding:12px; }}
+    .formula-card strong {{ display:block; color:#fff; margin-bottom:6px; }}
+    .formula-card code {{ color:#ffe66d; white-space:normal; line-height:1.6; }}
+    .metric-row {{ display:grid; grid-template-columns:120px minmax(0,1fr); gap:10px; align-items:center; }}
+    .meter {{ height:9px; border-radius:99px; background:rgba(255,255,255,.08); overflow:hidden; }}
+    .meter span {{ display:block; height:100%; border-radius:99px; background:linear-gradient(90deg,var(--rose),var(--amber),var(--cyan)); }}
+    .idea-results {{ grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; max-height:560px; overflow:auto; padding-right:3px; }}
+    .idea-card {{ display:grid; grid-template-columns:minmax(0,1fr) auto; gap:10px; align-items:center; border-left:3px solid var(--ideas); padding:10px 11px; }}
+    .idea-card strong {{ display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; margin-bottom:5px; color:#fff; font-size:14px; line-height:1.42; }}
+    .idea-card button {{ white-space:nowrap; padding:8px 10px; }}
+    .idea-meta {{ display:flex; gap:6px; flex-wrap:wrap; }}
+    .idea-card.active {{ border-color:var(--ideas); background:rgba(167,139,250,.12); box-shadow:0 0 28px rgba(167,139,250,.12); }}
+    .link-analyzer {{ display:grid; grid-template-columns:minmax(0,1fr) auto; gap:10px; align-items:center; }}
+    .link-analyzer input {{ min-height:52px; font-size:15px; border-color:rgba(255,122,168,.34); box-shadow:0 0 24px rgba(255,122,168,.08); }}
+    .link-analyzer button {{ min-height:52px; min-width:146px; font-weight:900; }}
+    .home-profile-sync {{ align-items:start; margin-top:12px; }}
+    .home-profile-sync input {{ min-height:58px; }}
+    .home-profile-sync .sync-cta {{
+      min-width:146px; min-height:54px; height:54px; padding:0 20px; margin-top:0;
+      display:flex; align-items:center; justify-content:center; text-align:center; font-size:18px; line-height:1; white-space:nowrap;
+    }}
+    .archive-list {{ display:grid; gap:8px; margin-top:12px; max-height:420px; overflow:auto; }}
+    .archive-item {{ border:1px solid var(--line); border-radius:12px; padding:10px; background:rgba(255,255,255,.04); }}
+    .archive-item strong {{ display:block; color:#fff; line-height:1.4; margin-bottom:4px; }}
+    .archive-details {{ margin-top:10px; border-top:1px solid var(--line); padding-top:10px; display:grid; gap:8px; }}
+    .archive-details .copybox {{ max-height:180px; overflow:auto; background:rgba(6,10,20,.42); border:1px solid var(--line); border-radius:10px; padding:10px; }}
+    .viral-cover-compare {{ display:grid; grid-template-columns:180px minmax(0,1fr); gap:12px; align-items:start; }}
+    .viral-cover-compare img {{ width:100%; aspect-ratio:9/16; object-fit:contain; border-radius:12px; border:1px solid var(--line); background:#07101f; }}
+    .cover-advice-list {{ display:grid; gap:8px; }}
+    .cover-advice-list div {{ border:1px solid var(--line); border-radius:10px; padding:9px 10px; background:rgba(255,255,255,.04); line-height:1.6; }}
+    .viral-deep-grid {{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:10px; }}
+    .viral-deep-card {{ border:1px solid var(--line); border-radius:12px; padding:12px; background:rgba(255,255,255,.045); line-height:1.65; }}
+    .viral-deep-card strong {{ display:block; color:#fff; margin-bottom:7px; }}
+    .viral-deep-card ul {{ margin:0; padding-left:18px; color:#d5e1ef; }}
+    .viral-deep-card li {{ margin:3px 0; }}
+    .script-pack {{ margin-top:14px; border-color:var(--active-line); }}
+    .script-title {{ font-size:18px; color:#fff; font-weight:900; margin-bottom:8px; }}
+    .recreate-pack {{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px; }}
+    .recreate-pack .copybox {{ max-height:260px; overflow:auto; }}
+    .qd-card {{ border:1px solid var(--active-line); border-radius:16px; background:linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.035)); overflow:hidden; }}
+    .qd-head {{ display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 14px; border-bottom:1px solid var(--line); background:rgba(255,255,255,.045); }}
+    .qd-tabs {{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; }}
+    .qd-tab {{ border:1px solid var(--line); border-radius:999px; padding:6px 10px; color:#cbd7e6; background:rgba(255,255,255,.045); font-size:12px; }}
+    .qd-tab.active {{ color:#06111e; background:linear-gradient(135deg,var(--active),#fff07d); border-color:rgba(255,255,255,.55); font-weight:900; }}
+    .qd-actions {{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }}
+    .qd-actions button {{ padding:8px 10px; font-size:12px; }}
+    .qd-table {{ width:100%; border-collapse:collapse; table-layout:fixed; }}
+    .qd-table th, .qd-table td {{ border-bottom:1px solid var(--line); padding:12px; text-align:left; vertical-align:top; }}
+    .qd-table th {{ color:#aebed2; font-size:12px; font-weight:900; background:rgba(6,10,20,.30); }}
+    .qd-video-cell {{ display:grid; grid-template-columns:68px minmax(0,1fr); gap:10px; align-items:start; }}
+    .qd-thumb {{ width:68px; aspect-ratio:3/4; border-radius:9px; border:1px solid var(--line); object-fit:cover; background:linear-gradient(145deg, rgba(255,122,168,.28), rgba(34,211,238,.20)); display:grid; place-items:center; color:#fff; font-size:12px; font-weight:900; overflow:hidden; }}
+    .qd-thumb img {{ width:100%; height:100%; object-fit:cover; display:block; }}
+    .qd-video-title {{ color:#fff; font-weight:900; line-height:1.45; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }}
+    .qd-video-meta {{ margin-top:6px; color:var(--muted); font-size:12px; line-height:1.5; }}
+    .qd-copy-preview {{ max-height:118px; overflow:auto; white-space:pre-wrap; line-height:1.7; color:#dbe7f5; }}
+    .qd-summary-list {{ margin:0; padding-left:18px; color:#d5e1ef; line-height:1.65; }}
+    .qd-summary-list li {{ margin:2px 0; }}
+    .qd-more {{ margin-top:8px; }}
+    .qd-ai-layout {{ display:grid; grid-template-columns:360px minmax(0,1fr); gap:14px; align-items:stretch; }}
+    .qd-ai-input, .qd-ai-output {{ border:1px solid var(--line); border-radius:14px; padding:14px; background:rgba(6,10,20,.38); }}
+    .qd-template-title {{ display:flex; align-items:center; gap:8px; color:#fff; font-weight:900; margin-bottom:12px; }}
+    .qd-template-title:before {{ content:""; width:24px; height:24px; border-radius:8px; background:linear-gradient(135deg,#ffe66d,var(--active)); box-shadow:0 0 20px var(--active-soft); }}
+    .qd-textarea {{ min-height:230px; max-height:330px; overflow:auto; border:1px solid var(--line); border-radius:12px; padding:12px; background:rgba(255,255,255,.035); white-space:pre-wrap; line-height:1.7; color:#dbe7f5; }}
+    .qd-char-row {{ display:flex; justify-content:space-between; gap:10px; margin-top:10px; color:var(--muted); font-size:12px; }}
+    .qd-generate {{ width:100%; margin-top:14px; min-height:50px; font-weight:950; }}
+    .qd-output-paper {{ min-height:260px; max-height:390px; overflow:auto; white-space:pre-wrap; line-height:1.85; color:#edf6ff; padding:14px; border:1px solid var(--line); border-radius:12px; background:rgba(255,255,255,.045); }}
+    .qd-output-label {{ margin:10px 0; color:var(--muted); font-size:12px; }}
+    .qd-output-actions {{ display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; margin-top:12px; }}
+    .qd-output-actions button {{ padding:9px 11px; }}
+    .calendar {{ grid-template-columns:repeat(7,minmax(0,1fr)); }}
+    .day {{ min-height:120px; border-top:4px solid var(--day-color, var(--planner)); }}
+    .day:nth-child(1) {{ --day-color:var(--optimizer); }}
+    .day:nth-child(2) {{ --day-color:var(--amber); }}
+    .day:nth-child(3) {{ --day-color:var(--cyan); }}
+    .day:nth-child(4) {{ --day-color:var(--planner); }}
+    .day:nth-child(5) {{ --day-color:var(--rose); }}
+    .day:nth-child(6) {{ --day-color:var(--ideas); }}
+    .day:nth-child(7) {{ --day-color:var(--blue); }}
+    .day strong {{ color:var(--day-color); }}
+    .planner-summary {{ grid-template-columns:repeat(3,minmax(0,1fr)); margin-bottom:14px; }}
+    .planner-summary .result {{ min-height:116px; }}
+    .planner-actions {{ grid-template-columns:repeat(2,minmax(0,1fr)); margin-top:14px; }}
+    .plan-card h3 {{ margin:8px 0 10px; }}
+    .plan-card ul, .trust-card ul {{ margin:10px 0 0; padding-left:18px; color:#cbd7e6; line-height:1.65; }}
+    .plan-card li, .trust-card li {{ margin:4px 0; }}
+    .day-goal {{ color:#fff; font-weight:900; margin-top:8px; }}
+    .day-cover {{ display:inline-block; margin-top:8px; padding:7px 9px; border-radius:9px; background:rgba(251,95,135,.12); color:#ffb4c7; border:1px dashed rgba(251,95,135,.36); font-size:12px; line-height:1.45; }}
+    .copybox {{ white-space:pre-wrap; line-height:1.7; }}
+    .progress-log {{ max-height:260px; overflow:auto; white-space:pre-wrap; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; line-height:1.6; color:#b8c7da; }}
+    .refresh-state {{ border-color:var(--active-line); background:var(--active-soft); }}
+    .hero-sync {{
+      position:relative; overflow:hidden; margin-bottom:18px; padding:22px; border-radius:18px;
+      border:1px solid rgba(246,196,83,.48);
+      background:
+        linear-gradient(135deg, rgba(246,196,83,.20), rgba(251,95,135,.15) 42%, rgba(79,123,255,.14)),
+        rgba(13,20,36,.82);
+      box-shadow:0 24px 90px rgba(246,196,83,.16), 0 0 60px rgba(251,95,135,.10);
+    }}
+    .hero-sync:before {{
+      content:""; position:absolute; inset:-1px; pointer-events:none;
+      background:linear-gradient(90deg, transparent, rgba(255,255,255,.18), transparent);
+      transform:translateX(-64%); animation:shine 5s ease-in-out infinite;
+    }}
+    @keyframes shine {{ 0%, 58% {{ transform:translateX(-64%); }} 100% {{ transform:translateX(64%); }} }}
+    .hero-sync-inner {{ position:relative; display:grid; grid-template-columns:minmax(0,1fr) 178px; gap:18px; align-items:stretch; }}
+    .hero-sync h2 {{ font-size:24px; margin-bottom:8px; }}
+    .hero-sync p {{ margin:0; max-width:760px; }}
+    .sync-cta {{
+      min-width:230px; min-height:58px; border-radius:14px; padding:15px 20px; cursor:pointer;
+      color:#07101f; font-weight:950; font-size:16px; border:1px solid rgba(255,255,255,.72);
+      background:linear-gradient(135deg,#ffe66d 0%,#ff7aa8 48%,#6ee7ff 100%);
+      box-shadow:0 18px 48px rgba(255,122,168,.28), 0 0 34px rgba(255,230,109,.28);
+    }}
+    .sync-cta:hover {{ transform:translateY(-2px); filter:saturate(1.12); }}
+    .sync-cta:disabled {{ cursor:not-allowed; opacity:.72; transform:none; }}
+    .self-sync-card {{
+      width:178px; min-width:178px; height:178px; min-height:0; align-self:center; display:flex; flex-direction:column; align-items:flex-start; justify-content:space-between;
+      text-align:left; color:#06111e; border-radius:18px; padding:18px; line-height:1.25;
+      background:linear-gradient(135deg,#6ee7ff 0%,#ffe66d 48%,#ff7aa8 100%);
+      box-shadow:0 24px 70px rgba(34,211,238,.24), 0 0 42px rgba(255,122,168,.22);
+    }}
+    .self-sync-card span:first-child {{ font-size:13px; letter-spacing:.08em; text-transform:uppercase; opacity:.72; }}
+    .self-sync-card span:last-child {{ font-size:22px; font-weight:950; }}
+    .home-refresh-status {{ margin-top:12px; width:100%; min-height:48px; border-color:rgba(246,196,83,.34); background:rgba(246,196,83,.10); }}
+    .hidden {{ display:none !important; }}
+    @media (max-width:1080px) {{
+      .app {{ grid-template-columns:1fr; }}
+      aside {{ position:relative; height:auto; }}
+      nav {{ display:flex; overflow:auto; gap:6px; }}
+      nav button {{ width:auto; white-space:nowrap; }}
+      .kpis,.videos,.split,.three,.calendar,.planner-summary,.planner-actions {{ grid-template-columns:1fr; }}
+      .cover-trends {{ grid-template-columns:1fr; }}
+      .stats-grid,.review-sections {{ grid-template-columns:1fr; }}
+      main {{ padding:18px; }}
+      header {{ display:block; }}
+      .status-pill {{ display:inline-block; margin-top:10px; }}
+      .hero-sync-inner {{ grid-template-columns:1fr; }}
+      .sync-cta {{ width:100%; }}
+      .self-sync-card {{ width:100%; min-width:0; height:auto; aspect-ratio:auto; min-height:118px; }}
+      .home-refresh-status {{ width:100%; }}
+      .formula-grid,.metric-row,.idea-results,.link-analyzer {{ grid-template-columns:1fr; }}
+      .viral-cover-compare {{ grid-template-columns:1fr; }}
+      .viral-deep-grid {{ grid-template-columns:1fr; }}
+      .recreate-pack {{ grid-template-columns:1fr; }}
+      .qd-ai-layout {{ grid-template-columns:1fr; }}
+      .qd-table {{ min-width:760px; }}
+      .qd-card {{ overflow:auto; }}
+    }}
+  </style>
+</head>
+<body data-view="home">
+  <div class="app">
+    <aside>
+      <div class="brand">AI 超级个体工作台</div>
+      <div class="aside-note">AI 超级个体内容管理：发完作品后复盘，发布前优化标题、封面、文案，并持续生成下一批选题。</div>
+      <nav>
+        <button class="active" data-view="home">工作台首页</button>
+        <button data-view="library">已发布复盘</button>
+        <button data-view="ideas">选题生成器</button>
+        <button data-view="optimizer">标题/封面/文案优化</button>
+        <button data-view="viral">爆款短视频拆解</button>
+        <button data-view="planner">发布规划</button>
+        <button data-view="update">抖音数据抓取</button>
+      </nav>
+    </aside>
+    <main>
+      <header>
+        <div>
+          <h1>AI 超级个体内容管理</h1>
+          <p class="sub">这是你的本地短视频指挥舱：直接使用从抖音账号抓取的作品信息和转写稿，帮助你复盘已发布内容，并随时生成标题、封面、文案结构和下一批选题。</p>
+        </div>
+        <div class="status-pill">本地数据：{len(rows)} 条 · 生成于 {data['generatedAt']}</div>
+      </header>
+
+      <section id="home" class="view active">
+        <div class="hero-sync">
+          <div class="hero-sync-inner">
+            <div>
+              <div class="module-label">douyin data sync</div>
+              <h2>输入博主主页链接，抓取公开作品并自动分析</h2>
+              <p class="muted">粘贴任意抖音博主主页分享链接，工作台会抓取该主页公开展示的短视频作品；只有通过目标作者归属校验后，才会更新作品库并快速生成分析。</p>
+              <div class="link-analyzer home-profile-sync">
+                <input id="homeProfileUrl" placeholder="粘贴博主主页分享链接，例如 https://v.douyin.com/... 或 douyin.com/user/...">
+                <button class="sync-cta" id="homeRefreshProfile">抓取抖音作品</button>
+              </div>
+              <div id="homeRefreshStatus" class="result home-refresh-status"><b>状态：</b>待命</div>
+            </div>
+            <button class="sync-cta self-sync-card" id="homeRefreshDouyin"><span>My Account</span><span>抓取我的抖音</span></button>
+          </div>
+        </div>
+        <div class="grid kpis">
+          <div class="panel kpi kpi-total"><b id="kpiTotal">0</b><span>作品库</span></div>
+          <div class="panel kpi kpi-avg"><b id="kpiAvg">0</b><span>平均潜力分</span></div>
+          <div class="panel kpi kpi-best"><b id="kpiBest">-</b><span>最强主题</span></div>
+          <div class="panel kpi kpi-need"><b id="kpiNeed">0</b><span>待优化作品</span><button class="kpi-action" id="viewNeedVideos">查看待优化内容</button></div>
+        </div>
+        <div class="grid split">
+          <div class="panel">
+            <div class="module-label">action center</div>
+            <h2>今天先做什么</h2>
+            <div id="todayActions" class="result-list"></div>
+          </div>
+          <div class="panel">
+            <div class="module-label">growth map</div>
+            <h2>账号下一步方向</h2>
+            <div class="result-list">
+              <div class="result"><b>主线：</b>女性清醒成长，语气保持“温柔但锋利”。</div>
+              <div class="result"><b>流量入口：</b>追星心理、关系边界、高敏感、行动重建。</div>
+              <div class="result"><b>升级点：</b>每条视频从“被说中”再往前一步，给用户一个可执行动作。</div>
+              <div class="result"><b>封面策略：</b>三行字固定为“痛点 + 反常识 + 栏目标签”。</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="library" class="view">
+        <div class="module-label">content library</div>
+        <h2>已发布作品复盘</h2>
+        <div class="toolbar">
+          <input class="small-input" id="searchVideo" placeholder="搜索标题、主题、标签">
+          <select class="small-input" id="themeFilter"><option value="">全部主题</option></select>
+          <button class="secondary" id="filterNeeds">只看待优化作品</button>
+          <button class="secondary" id="sortScore">按潜力分排序</button>
+        </div>
+        <div class="grid videos" id="videoList"></div>
+      </section>
+
+      <section id="optimizer" class="view">
+        <div class="grid split">
+          <div class="panel">
+            <div class="module-label">copy lab</div>
+            <h2>发布前优化</h2>
+            <label class="muted">标题/简介</label>
+            <input id="draftTitle" placeholder="例如：你追的不是他，是你不敢活的人生">
+            <div style="height:10px"></div>
+            <label class="muted">口播稿/转写稿</label>
+            <textarea id="draftText" placeholder="把你准备发布的文案或视频转写稿粘贴到这里"></textarea>
+            <div class="toolbar">
+              <select id="draftTheme">
+                <option value="">自动判断主题</option>
+              </select>
+              <select id="draftHook"></select>
+              <button class="primary" id="analyzeDraft">生成优化建议</button>
+              <button class="secondary" id="plainRewrite">原文案大白话洗稿</button>
+              <button class="secondary" id="useBestVideo">用最高分作品试填</button>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="module-label">output radar</div>
+            <h2>优化结果</h2>
+            <div id="draftResult" class="result-list">
+              <div class="result muted">粘贴文案后点击“生成优化建议”。</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="viral" class="view">
+        <div class="panel">
+          <div class="module-label">viral lab</div>
+          <h2>爆款短视频拆解</h2>
+          <label class="muted">短视频链接</label>
+          <div class="link-analyzer">
+            <input id="viralUrl" placeholder="粘贴抖音短视频链接，例如 https://v.douyin.com/... 或 https://www.douyin.com/video/...">
+            <button class="primary" id="analyzeViral">分析链接</button>
+          </div>
+          <div class="result muted">这是独立的链接拆解工作台：粘贴一条短视频链接，系统会先像“提文案”一样生成视频、文案内容、全文摘要和复制操作；再像“AI文案-智能二创”一样生成可直接复制使用的二创成品。</div>
+        </div>
+        <div class="panel script-pack">
+          <div class="module-label">growth pattern</div>
+          <h2>拆解结果</h2>
+          <div id="viralResult" class="result-list">
+            <div class="result muted">粘贴短视频链接后点击“分析链接”，这里会生成提取文案表格、深度拆解、封面对照和 AI 二创文案。</div>
+          </div>
+        </div>
+        <div class="panel script-pack">
+          <div class="module-label">case archive</div>
+          <h2>已归档爆款拆解</h2>
+          <div id="viralArchiveList" class="archive-list">
+            <div class="result muted">归档后的拆解会出现在选题生成器里，可选择套用。</div>
+          </div>
+        </div>
+      </section>
+
+      <section id="ideas" class="view">
+        <div class="grid split">
+          <div class="panel">
+            <div class="module-label">topic engine</div>
+            <h2>选题生成器</h2>
+            <label class="muted">主题方向</label>
+            <select id="ideaTheme"></select>
+            <div style="height:8px"></div>
+            <input id="ideaThemeCustom" placeholder="也可以手动输入主题方向，例如：AI 时代个人品牌 / 成交型信任内容">
+            <div style="height:10px"></div>
+            <label class="muted">用户痛点</label>
+            <select id="ideaPain"></select>
+            <div style="height:8px"></div>
+            <input id="ideaPainCustom" placeholder="也可以手动输入用户痛点，例如：想做账号但不知道怎么让别人信任">
+            <div style="height:10px"></div>
+            <label class="muted">默认开场钩子公式</label>
+            <select id="ideaHook"></select>
+            <div style="height:10px"></div>
+            <label class="muted">套用爆款拆解案例</label>
+            <select id="ideaViralCase"></select>
+            <div style="height:10px"></div>
+            <label class="muted">生成数量</label>
+            <select id="ideaCount">
+              <option>12</option><option selected>24</option><option>36</option>
+            </select>
+            <div class="toolbar">
+              <button class="primary" id="generateIdeas">生成选题</button>
+              <button class="secondary" id="copyIdeas">复制选题</button>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="module-label">idea bank</div>
+            <h2>选题结果</h2>
+            <div id="ideasResult" class="result-list idea-results"></div>
+          </div>
+        </div>
+        <div class="panel script-pack">
+          <div class="module-label">script package</div>
+          <h2>确定选题后的标题 / 文字稿 / 封面</h2>
+          <div id="ideaPackage" class="result-list">
+            <div class="result muted">点击任意选题右侧的“确定并生成”，这里会自动生成可发布素材。</div>
+          </div>
+        </div>
+      </section>
+
+      <section id="planner" class="view">
+        <div class="module-label">weekly route</div>
+        <h2>基于已抓取作品的 7 天发布规划</h2>
+        <p class="muted">先点击“抓取我的抖音 App”同步你自己的作品库，系统会根据主题分布、潜力分、钩子/结构/封面短板，生成未来 7 天的发布指导、涨粉动作和信任感建设清单。</p>
+        <div class="grid planner-summary" id="plannerSummary"></div>
+        <div class="grid calendar" id="calendar"></div>
+        <div class="grid planner-actions" id="trustActions"></div>
+      </section>
+
+      <section id="update" class="view">
+        <div class="grid split">
+          <div class="panel">
+            <div class="module-label">data sync</div>
+            <h2>按博主主页链接抓取作品并分析</h2>
+            <div class="result-list">
+              <div class="result"><b>主流程：</b>粘贴抖音博主主页分享链接，系统会抓取该主页公开展示的短视频作品、校验目标作者、获取详情、快速分析并重建工作台。</div>
+              <div class="result"><b>准确性保护：</b>不会再把推荐流、热门链接或页面缓存里的视频当成目标博主作品；没有通过作者归属校验时会失败并保留原作品库。</div>
+              <div class="result"><b>无需手动保存：</b>视频转写稿会自动保存到本地，工作台读取最新分析结果。</div>
+              <div class="result"><b>完成后：</b>页面会自动刷新，你会看到新的作品库、复盘、标题封面建议和选题方向。</div>
+              <label class="muted">博主主页分享链接</label>
+              <div class="link-analyzer">
+                <input id="profileUrl" placeholder="粘贴博主主页分享链接，例如 https://v.douyin.com/... 或 https://www.douyin.com/user/...">
+                <button class="primary" id="refreshProfile">抓取这个博主</button>
+              </div>
+              <div class="actions">
+                <button class="secondary" id="refreshDouyin">备用：抓取我的抖音 App（macOS）</button>
+                <button class="secondary" id="checkRefresh">查看刷新状态</button>
+              </div>
+              <div id="refreshStatus" class="result refresh-state"><b>状态：</b>待命</div>
+              <div id="refreshLog" class="result progress-log hidden"></div>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="module-label">local files</div>
+            <h2>本地文件</h2>
+            <div class="copybox result">管理地址：
+http://127.0.0.1:8787/
+
+本地数据：
+data/douyin_visible_posts.json
+data/douyin_details_merged.json
+output/transcripts/
+
+如果管理地址打不开，启动：
+cd /Users/a001/Documents/抖音工作流
+.venv/bin/python scripts/serve_workflow_app.py</div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const state = {json_for_html(data)};
+
+    const $ = (sel) => document.querySelector(sel);
+    const $$ = (sel) => [...document.querySelectorAll(sel)];
+    const esc = (s) => String(s ?? '').replace(/[&<>"']/g, m => ({{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}}[m]));
+    const fmt = (n) => {{
+      const num = Number(n || 0);
+      if (num >= 100000000) return (num / 100000000).toFixed(1).replace(/\\.0$/,'') + '亿';
+      if (num >= 10000) return (num / 10000).toFixed(1).replace(/\\.0$/,'') + '万';
+      return String(num);
+    }};
+    const accessKey = new URLSearchParams(location.search).get('key') || '';
+    const apiUrl = (path) => `${{path}}${{path.includes('?') ? '&' : '?'}}key=${{encodeURIComponent(accessKey)}}`;
+    const apiOptions = (options={{}}) => ({{
+      ...options,
+      headers: {{ ...(options.headers || {{}}), ...(accessKey ? {{ 'X-Workflow-Key': accessKey }} : {{}}) }}
+    }});
+
+    const hookFormulas = [
+      {{ id:'pain_reverse', name:'痛点反转', pattern:'你以为{{pain}}，其实真正的问题是{{truth}}', use:'适合清醒观点、反常识选题' }},
+      {{ id:'result_warning', name:'结果预警', pattern:'如果你还在{{pain}}，最后最容易失去的是{{loss}}', use:'适合关系、边界、内耗类内容' }},
+      {{ id:'identity_call', name:'身份点名', pattern:'总是{{pain}}的人，先别急着怪自己', use:'适合高共鸣口播开头' }},
+      {{ id:'three_seconds', name:'三秒扎心', pattern:'先说结论：{{truth}}，不是{{wrong}}', use:'适合需要快速停留的短视频' }},
+      {{ id:'story_scene', name:'具体场景', pattern:'你有没有遇到过这种时刻：{{scene}}', use:'适合增强真实感和代入感' }},
+      {{ id:'celebrity_projection', name:'追星投射', pattern:'你喜欢的不是他，是他替你活出了{{desire}}', use:'适合追星心理系列' }}
+    ];
+
+    function hookById(id) {{
+      return hookFormulas.find(x=>x.id===id) || hookFormulas[0];
+    }}
+
+    function danaoModulesFor(area) {{
+      const modules = state.danao?.modules || [];
+      return modules.filter(mod => (mod.useFor || []).includes(area));
+    }}
+
+    function danaoPrinciples(area, limit=3) {{
+      const modules = danaoModulesFor(area);
+      const items = modules
+        .map(mod => (mod.principles || [])[0] ? {{ module: mod.name, principle: mod.principles[0], sources: mod.sources || [] }} : null)
+        .filter(Boolean);
+      modules.forEach(mod => {{
+        (mod.principles || []).slice(1).forEach(principle => items.push({{ module: mod.name, principle, sources: mod.sources || [] }}));
+      }});
+      return items.slice(0, limit);
+    }}
+
+    function renderDanaoReference(area, limit=3) {{
+      const refs = danaoPrinciples(area, limit);
+      if (!refs.length) return '';
+      const sourceCount = state.danao?.sourceCount || 0;
+      return `
+        <div class="result danao-ref">
+          <b>外部大脑参考：</b><span class="muted">已接入 danao 文件夹 ${{sourceCount}} 份课件，输出前先参考相关方法论。</span><br>
+          ${{refs.map((x,i)=>`${{i+1}}. 【${{esc(x.module)}}】${{esc(x.principle)}}`).join('<br>')}}
+        </div>`;
+    }}
+
+    function currentHookId() {{
+      return localStorage.getItem('workflowHookFormula') || 'pain_reverse';
+    }}
+
+    function syncHookSelects(id) {{
+      const hookId = hookById(id).id;
+      localStorage.setItem('workflowHookFormula', hookId);
+      ['draftHook','ideaHook'].forEach(sel => {{
+        const el = $('#' + sel);
+        if (el) el.value = hookId;
+      }});
+    }}
+
+    function viralArchives() {{
+      try {{
+        return JSON.parse(localStorage.getItem('workflowViralArchives') || '[]');
+      }} catch (err) {{
+        return [];
+      }}
+    }}
+
+    function saveViralArchives(items) {{
+      localStorage.setItem('workflowViralArchives', JSON.stringify(items.slice(0,30)));
+    }}
+
+    function currentViralArchive() {{
+      const id = $('#ideaViralCase')?.value || '';
+      return viralArchives().find(x=>x.id === id) || null;
+    }}
+
+    function coverDisplaySrc(src, seed='') {{
+      if (!src) return '';
+      if (!src.startsWith('/viral_covers/')) return src;
+      const sep = src.includes('?') ? '&' : '?';
+      return `${{src}}${{sep}}v=${{encodeURIComponent(seed || Date.now())}}`;
+    }}
+
+    function viralCoverAdvice(x) {{
+      const title = x.title || '待拆解短视频';
+      const theme = x.theme || '爆款拆解';
+      const pain = x.pain || inferCorePain(title, x.template || '', theme);
+      const cover = Array.isArray(x.cover) ? x.cover : [];
+      if (theme === '当前链接拆解') {{
+        const topic = linkTopic(title, x.fullText || x.transcriptPreview || '');
+        const lines = [
+          cover[0] || safeClip(topic, 10),
+          cover[1] || '这点最关键',
+          cover[2] || '看完再决定'
+        ];
+        return [
+          `三行字建议：${{lines.join(' / ')}}。封面只承接当前链接主题「${{topic}}」，不套用历史账号栏目词。`,
+          `人物画面建议：优先保留原视频封面的主体关系和视线方向，重新强化大字信息。`,
+          `视觉重点：第一行给主题，第二行给判断，第三行给继续看的理由。`,
+          `对照检查：封面必须让用户在点开前知道这条视频讲的是「${{topic}}」，不要混入旧账号的心理、情感或女性成长标签。`
+        ];
+      }}
+      const themeName = theme.split('/')[0] || theme;
+      const lineOne = cover[0] || (title.includes('追') ? '你追的不是他' : pain.slice(0, 10) || '别再委屈自己');
+      const lineTwo = cover[1] || (theme.includes('追星') ? '是不敢活的自己' : '真正问题在这里');
+      const lineThree = cover[2] || themeName;
+      const emotion = theme.includes('追星') ? '向往感 + 自我投射' : theme.includes('边界') || pain.includes('讨好') ? '委屈感 + 清醒反击' : theme.includes('情绪') ? '压抑感 + 稳定感' : '被说中 + 可改变';
+      return [
+        `三行字建议：${{lineOne}} / ${{lineTwo}} / ${{lineThree}}。这组字要直接承接标题「${{title.slice(0, 24)}}」，不要换成泛泛的“成长/清醒”。`,
+        `人物画面建议：真人近景看镜头，表情贴合「${{emotion}}」；如果原封面表情不明显，优先换成更强的眼神和半身口播姿态。`,
+        `视觉重点：第一行打痛点人群，第二行打反常识，第三行做栏目标签；字数控制在 14 到 20 个大字，避免把正文塞进封面。`,
+        `对照检查：这条内容的爆点是「${{pain}}」，封面必须让用户一眼知道“这说的是我”，否则再好的文案也会输在点击。`
+      ];
+    }}
+
+    function renderCoverCompare(x) {{
+      const tips = x.coverAdvice || viralCoverAdvice(x);
+      const displaySrc = coverDisplaySrc(x.coverImage, x.coverSource || x.url || x.createdAt || '');
+      const image = displaySrc ? `<img src="${{esc(displaySrc)}}" alt="点开短视频前看到的完整封面图" referrerpolicy="no-referrer">` : `<div class="result muted">当前链接未拿到封面图。匹配到本地作品或详情接口返回封面后，会自动展示封面对照。</div>`;
+      return `
+        <div class="viral-cover-compare">
+          <div>${{image}}</div>
+          <div class="cover-advice-list">${{tips.map(t=>`<div>${{esc(t)}}</div>`).join('')}}</div>
+        </div>`;
+    }}
+
+    function viralDeepSections(x) {{
+      const title = x.title || '待拆解短视频';
+      const theme = x.theme || '爆款拆解';
+      const pain = x.pain || inferCorePain(title, x.template || '', theme);
+      const scores = x.scores || {{}};
+      const scoreRows = [
+        ['黄金三秒', scores.hook || 76],
+        ['冲突反差', scores.conflict || 78],
+        ['结构递进', scores.structure || 72],
+        ['行动价值', scores.action || 68],
+        ['封面点击', scores.cover || 76]
+      ];
+      const weakest = scoreRows.slice().sort((a,b)=>a[1]-b[1])[0];
+      if (theme === '当前链接拆解') {{
+        const topic = linkTopic(title, x.fullText || x.transcriptPreview || '');
+        const first = safeClip(splitSentences(x.fullText || x.transcriptPreview || title, 1)[0] || title, 42);
+        return [
+          {{ title:'爆款短视频底层逻辑', items:[`当前链接核心主题：${{topic}}。`, '只拆这条链接的标题、转写稿、封面和数据，不调用历史账号主题。', '复用的是信息推进方式，不复用原句。'] }},
+          {{ title:'黄金三秒开场', items:[`原链接开场抓手：${{first}}。`, '二创时第一句话仍然先给判断或结果。', '不要加旧账号的心理、女性成长、情感类解释。'] }},
+          {{ title:'内容结构', items:['0-3秒：抛出当前链接的核心判断。', '4-12秒：补一个新场景，让主题更具体。', '13-28秒：解释原因或步骤。', '结尾：围绕当前主题设计互动问题。'] }},
+          {{ title:'爆款脚本框架', items:[`开头：${{first}}`, `场景：围绕「${{topic}}」换一个新例子。`, '推进：讲清原因，不照搬原视频句子。', '方法：给一个马上能执行的动作。', `互动：你对「${{topic}}」最想先解决哪一步？`] }},
+          {{ title:'完播与转化关键动作', items:['每 5-8 秒推进一个信息点。', '用画面、字幕和停顿强调当前链接最强的一句话。', '结尾问题只围绕当前链接主题，不带旧栏目口号。'] }},
+          {{ title:'爆款短视频数据分析', items:[...scoreRows.map(([name,value])=>`${{name}}：${{value}}分`), `优先优化短板：${{weakest[0]}}。`] }}
+        ];
+      }}
+      const hook = title.includes('为什么') ? title : `为什么${{pain}}，会让用户第一眼停下来`;
+      const solution = theme.includes('追星')
+        ? '把对人物的喜欢转成“我想成为什么样的人”，给用户一个自我升级动作。'
+        : theme.includes('边界') || pain.includes('讨好')
+          ? '先承认委屈，再给一句能马上用的拒绝话术，让用户觉得有出口。'
+          : theme.includes('情绪')
+            ? '把情绪问题拆成一个身体动作或十分钟缓冲方法，降低执行门槛。'
+            : '把抽象观点落到一个今天能做的小动作，让用户从共鸣走向关注。';
+      return [
+        {{
+          title:'爆款短视频底层逻辑',
+          items:[`用户入口不是“内容好”，而是「${{pain}}」被点名。`, `这条内容要完成：被说中 -> 重新理解 -> 有一个动作可做。`, `账号承接点：${{theme}}，要让新用户知道你持续解决同一类问题。`]
+        }},
+        {{
+          title:'黄金三秒开场',
+          items:[`第一句话：${{hook}}。`, '不要先介绍背景，先说结论、代价或反常识。', `画面第一秒配合封面大字：${{(x.cover || [title]).slice(0,2).join(' / ')}}。`]
+        }},
+        {{
+          title:'高吸引力开头',
+          items:[`身份点名：总是${{pain}}的人，先别急着怪自己。`, `结果预警：继续这样，最容易丢掉的是自己的主动权。`, `反常识：问题不在你想太多，而在你太久没有站回自己。`]
+        }},
+        {{
+          title:'内容结构',
+          items:['0-3秒：痛点/结论直接抛出。', '4-12秒：给一个具体场景，让用户确认“这说的是我”。', '13-28秒：误区反转，讲清真正原因。', '最后8秒：给动作 + 评论问题。']
+        }},
+        {{
+          title:'爆款脚本框架',
+          items:[`开头：${{hook}}`, `场景：把「${{pain}}」放进一个真实生活瞬间。`, `反转：这不是你不够好，而是你的边界/理想自我/情绪出口没有被看见。`, `方法：${{solution}}`, '互动：评论区留一句“我先站回自己”。']
+        }},
+        {{
+          title:'痛点挖掘与解决方案',
+          items:[`表层痛点：${{pain}}。`, '深层动机：用户想被理解，也想知道自己下一步怎么变好。', `解决方案：${{solution}}`, '输出方式：少讲大道理，多给一句话术、一个动作、一个判断标准。']
+        }},
+        {{
+          title:'完播与转化关键动作',
+          items:['每 5-8 秒给一个新信息点，避免连续金句但没有推进。', '中段插入“你可能以为...但真正...”制造继续看的理由。', '结尾不要只说点赞关注，要问一个能让用户暴露处境的问题。', '归档复用时，把互动问题同步改成选题生成器的结尾。']
+        }},
+        {{
+          title:'爆款短视频数据分析',
+          items:[...scoreRows.map(([name,value])=>`${{name}}：${{value}}分`), `优先优化短板：${{weakest[0]}}。`, weakest[1] < 72 ? '判断：这条更适合先优化开头/封面，再复刻结构。' : '判断：整体可复用，适合沉淀成选题模板。']
+        }}
+      ];
+    }}
+
+    function renderViralDeepDive(x) {{
+      const sections = x.deepDive || viralDeepSections(x);
+      return `<div class="viral-deep-grid">${{sections.map(sec=>`
+        <div class="viral-deep-card">
+          <strong>${{esc(sec.title)}}</strong>
+          <ul>${{(sec.items || []).map(item=>`<li>${{esc(item)}}</li>`).join('')}}</ul>
+        </div>`).join('')}}</div>`;
+    }}
+
+    function splitSentences(text, limit=5) {{
+      return String(text || '')
+        .replace(/\\s+/g, ' ')
+        .split(/(?<=[。！？!?；;])|\\n+/)
+        .map(x=>x.trim())
+        .filter(Boolean)
+        .slice(0, limit);
+    }}
+
+    function cleanLinkText(text) {{
+      return String(text || '')
+        .replace(/#\\S+/g, '')
+        .replace(/[\\u{{1F300}}-\\u{{1FAFF}}]/gu, '')
+        .replace(/\\s+/g, ' ')
+        .trim();
+    }}
+
+    function safeClip(text, max=28) {{
+      const clean = cleanLinkText(text);
+      return clean.length > max ? clean.slice(0, max) : clean;
+    }}
+
+    function linkTopic(title, original) {{
+      const titleClean = cleanLinkText(title).replace(/^抖音作品\\s*\\d+$/, '').trim();
+      if (titleClean) return safeClip(titleClean, 18);
+      const sentence = splitSentences(original, 1)[0] || '';
+      return safeClip(sentence, 18) || '这条内容';
+    }}
+
+    function legacySafe(text) {{
+      return String(text || '')
+        .replace(/心理学/g, '内容逻辑')
+        .replace(/心理/g, '内容')
+        .replace(/女性成长/g, '内容成长')
+        .replace(/追星/g, '兴趣话题')
+        .replace(/王一博/g, '原视频人物')
+        .replace(/太敏感/g, '想法没有讲清楚')
+        .replace(/委屈/g, '卡点')
+        .replace(/被爱/g, '被看见')
+        .replace(/讨好/g, '迎合')
+        .replace(/内耗/g, '反复消耗')
+        .replace(/把自己活回来/g, '把表达讲清楚');
+    }}
+
+    function polishSentence(sentence) {{
+      return legacySafe(cleanLinkText(sentence))
+        .replace(/[。！？!?；;]+$/g, '')
+        .replace(/^(然后|所以|但是|因为|其实|而且|还有)[，,\\s]*/g, '')
+        .trim();
+    }}
+
+    function deepItems(x, keyword) {{
+      const sections = x.deepDive || viralDeepSections(x);
+      const section = sections.find(sec => String(sec.title || '').includes(keyword));
+      return section ? (section.items || []).map(item => legacySafe(cleanLinkText(item))) : [];
+    }}
+
+    function extractAfterLabel(text) {{
+      return legacySafe(cleanLinkText(text))
+        .replace(/^[^：:]{1,12}[：:]/, '')
+        .replace(/[。；;]+$/g, '')
+        .trim();
+    }}
+
+    function deepTopic(x) {{
+      const logic = deepItems(x, '底层逻辑');
+      const fromLogic = logic.find(item => item.includes('核心主题'));
+      if (fromLogic) return safeClip(extractAfterLabel(fromLogic), 10);
+      return safeClip(linkTopic(x.title || '', x.fullText || x.transcriptPreview || ''), 10);
+    }}
+
+    function finalDeepScriptGuard(script, source) {{
+      let out = String(script || '')
+        .replace(/这条内容/g, '这个问题')
+        .replace(/原视频/g, '这个案例')
+        .replace(/二创/g, '这版表达')
+        .replace(/爆款逻辑/g, '关键判断')
+        .replace(/黄金三秒/g, '开头')
+        .replace(/脚本框架/g, '表达顺序')
+        .replace(/底层逻辑[：:]/g, '')
+        .replace(/内容结构[：:]/g, '')
+        .replace(/传播动作[：:]/g, '')
+        .replace(/转化动作[：:]/g, '');
+      if (!/(情感|心理|女性成长|追星|王一博)/.test(source || '')) {{
+        out = out
+          .replace(/心理/g, '判断')
+          .replace(/情感/g, '表达')
+          .replace(/女性成长/g, '个人成长')
+          .replace(/追星/g, '兴趣表达')
+          .replace(/王一博/g, '这个人物');
+      }}
+      return out.replace(/\\n{3,}/g, '\\n\\n').trim();
+    }}
+
+    function makeDeepDrivenScript(x, topic) {{
+      const topicName = safeClip(topic, 10) || '这件事';
+      const logic = deepItems(x, '底层逻辑');
+      const hookRules = deepItems(x, '黄金三秒');
+      const structure = deepItems(x, '内容结构');
+      const framework = deepItems(x, '脚本框架');
+      const conversion = deepItems(x, '转化');
+      const openingRule = hookRules.find(item => item.includes('判断') || item.includes('结果') || item.includes('抓手')) || '第一句话先给判断或结果';
+      const sceneRule = framework.find(item => item.includes('场景')) || structure.find(item => item.includes('4-12秒')) || '补一个新场景，让主题更具体';
+      const pushRule = framework.find(item => item.includes('推进')) || structure.find(item => item.includes('13-28秒')) || '讲清原因，不照搬原视频句子';
+      const methodRule = framework.find(item => item.includes('方法')) || '给一个马上能执行的动作';
+      const interactRule = framework.find(item => item.includes('互动')) || conversion.find(item => item.includes('结尾')) || `围绕「${{topicName}}」设计互动问题`;
+      const rhythmRule = conversion.find(item => item.includes('5-8') || item.includes('推进')) || '每 5-8 秒推进一个信息点';
+      const logicRule = logic.find(item => item.includes('信息推进') || item.includes('复用')) || '复用信息推进方式，不复用原句';
+
+      const source = `${{topicName}} ${{[...logic, ...hookRules, ...structure, ...framework, ...conversion].join(' ')}}`;
+      const has = (words) => words.some(word => source.includes(word));
+      let pain = '你一直停在知道这件事很重要，却没有把它变成一个具体动作';
+      let value = '把判断落到行动里';
+      let scene = `你刷到「${{topicName}}」的时候，觉得有道理，收藏了，转发了，但真正回到自己的问题里，还是不知道第一步该怎么做`;
+      let actionA = `先把「${{topicName}}」里最关键的一个问题写清楚`;
+      let actionB = '再把它拆成一个今天就能完成的小动作';
+      let actionC = '最后用一个结果来验证，而不是只停留在想法里';
+      let outcome = '你会从看懂一条内容，变成真的能把它用到自己身上';
+
+      if (has(['账号','内容','自媒体','流量','粉丝','变现','客户','成交','IP','个人品牌','直播','获客'])) {{
+        pain = '你一直在发作品、追热点、学爆款，却没有让用户明白你到底能帮他解决什么';
+        value = '先建立信任，再放大流量';
+        scene = '你辛辛苦苦发了很多条，播放有起有落，但用户看完只觉得热闹，不知道为什么要关注你，更不知道为什么要相信你';
+        actionA = '先用一句话说清楚你帮谁解决什么问题';
+        actionB = '再连续发三条内容：一条讲误区，一条讲方法，一条讲案例';
+        actionC = '最后把每条作品结尾都落到一个明确行动，让用户知道下一步怎么做';
+        outcome = '用户才会从刷到你，变成记住你，再到愿意信任你';
+      }} else if (has(['学习','考试','课程','读书','技能','训练','练习','方法','效率','复习'])) {{
+        pain = '你一直在找资料、听方法、换计划，但真正动手练的次数太少';
+        value = '把信息变成练习，把练习变成反馈';
+        scene = '你看完很多经验，当下很有动力，第二天又回到原来的状态，因为你没有把它拆成一个可以重复执行的动作';
+        actionA = '先只选一个最重要的知识点';
+        actionB = '用自己的话讲出来，或者马上做一遍';
+        actionC = '当天就做一次反馈，别等完全准备好';
+        outcome = '你会从“我懂了”，变成“我真的会用了”';
+      }} else if (has(['职场','老板','工资','同事','工作','副业','简历','面试','公司','创业'])) {{
+        pain = '你一直在等别人看见你的努力，却没有主动把自己的价值讲清楚';
+        value = '把被动等待变成主动证明';
+        scene = '你做了很多事，但汇报时说不出结果，谈机会时拿不出证据，最后只能继续等别人评价你';
+        actionA = '先把最近做出的三个结果列出来';
+        actionB = '把每个结果对应到对方真正关心的收益';
+        actionC = '下一次沟通时直接讲事实、数据和下一步';
+        outcome = '你会从被动等机会，变成主动争取空间';
+      }} else if (has(['店','产品','买','卖','价格','装修','房子','汽车','品牌','服务','体验','消费'])) {{
+        pain = '你容易被表面的价格、颜值或者卖点带着走，却忽略了真正影响使用体验的细节';
+        value = '先判断真实需求，再判断值不值得';
+        scene = '你当下觉得很心动，真正用起来才发现有些地方根本不适合自己，最后为冲动买单';
+        actionA = '先写下你最在意的三个使用场景';
+        actionB = '把每个选择放进真实场景里比较';
+        actionC = '只为长期会用到的价值买单';
+        outcome = '你会少花冤枉钱，也少做后悔的选择';
+      }}
+
+      const hook = `如果你正在为「${{topicName}}」反复纠结，先记住一句话：${{value}}。`;
+      const draft = [
+        hook,
+        `真正卡住你的不是信息不够，而是${{pain}}。`,
+        `你看，${{scene}}。很多人就是卡在这里：知道问题存在，但没有把判断说清楚，也没有把下一步讲明白。`,
+        `接下来别急着讲一堆道理，先给一个具体画面，再把原因讲透。用户先看见自己，才愿意继续听你往下说。`,
+        `中段只做一件事：把问题拆开讲，让用户知道自己不是差一点热情，而是少了一个可以照着走的步骤。`,
+        `所以方法很简单。第一，${{actionA}}。第二，${{actionB}}。第三，${{actionC}}。`,
+        `你不要一口气把所有信息都倒出来，每一步只讲一个重点：先让人停下来，再让人听懂，最后让人知道该怎么做。`,
+        `当你把这几步跑通，${{outcome}}。`,
+        `${{interactRule.includes('？') ? interactRule.replace(/^.*?[:：]/, '') : `如果你也卡在「${{topicName}}」，评论区告诉我你现在最卡的是哪一步，我下一条直接拆给你看。`}}`
+      ].join('\\n\\n');
+      return finalDeepScriptGuard(draft, source);
+    }}
+
+    function makeConcreteScript(topic, rawSentences) {{
+      const lines = rawSentences.map(polishSentence).filter(Boolean);
+      const source = `${{topic}} ${{lines.join(' ')}}`;
+      const has = (words) => words.some(word => source.includes(word));
+      const topicName = safeClip(topic, 16) || '这件事';
+      let frame = {{
+        audience: `正在关注「${{topicName}}」的人`,
+        trap: '只看到了表面的结果，却没有把它变成自己的行动',
+        shift: '先抓住关键判断，再把判断落到一个具体动作里',
+        scene: '你收藏了很多信息，真正要用的时候却还是不知道从哪一步开始',
+        action1: '把你现在最卡的一步写下来',
+        action2: '删掉那些暂时用不上的干扰信息',
+        action3: '今天只完成一个最小动作',
+        result: '你会从被信息推着走，变成自己能做决定的人'
+      }};
+      if (has(['账号','内容','自媒体','流量','粉丝','变现','客户','成交','IP','个人品牌','直播','获客'])) {{
+        frame = {{
+          audience: `想把「${{topicName}}」做出结果的人`,
+          trap: '一上来就追热点、学形式、拼更新频率，却没有让别人看懂你能解决什么问题',
+          shift: '先把信任搭起来，再去谈流量和转化',
+          scene: '你每天都在发，可用户看完只觉得热闹，不知道为什么要关注你、相信你、继续等你下一条',
+          action1: '用一句话写清楚你帮谁解决什么问题',
+          action2: '连续发三条内容证明你的判断、方法和案例',
+          action3: '把每条作品的结尾都落到一个明确行动',
+          result: '用户会从刷到你，变成记住你，再到愿意信任你'
+        }};
+      }} else if (has(['学习','考试','课程','读书','技能','训练','练习','方法','效率','复习'])) {{
+        frame = {{
+          audience: `想把「${{topicName}}」真正学会的人`,
+          trap: '一直在找资料、换方法、听建议，却没有形成自己的练习节奏',
+          shift: '不要再把学习当成收集信息，要把它变成每天能重复的动作',
+          scene: '你看完一堆经验，当下很有动力，第二天又回到原来的状态',
+          action1: '只选一个最重要的知识点',
+          action2: '用自己的话讲出来或者写出来',
+          action3: '当天立刻做一次反馈，不要等完全准备好',
+          result: '你会从“看懂了”，变成真的会用'
+        }};
+      }} else if (has(['职场','老板','工资','同事','工作','副业','简历','面试','公司','创业'])) {{
+        frame = {{
+          audience: `正在处理「${{topicName}}」这类职场问题的人`,
+          trap: '只想着忍一忍、等一等，却没有主动整理自己的筹码',
+          shift: '别把希望都放在别人评价上，要把选择权一点点拿回来',
+          scene: '你明明做了很多事，但汇报时讲不清价值，谈机会时又拿不出证据',
+          action1: '把你最近做出的结果列出来',
+          action2: '把结果对应到对方真正关心的收益',
+          action3: '下一次沟通时直接讲事实、数据和下一步',
+          result: '你会从被动等待机会，变成主动争取空间'
+        }};
+      }} else if (has(['店','产品','买','卖','价格','装修','房子','汽车','品牌','服务','体验','消费'])) {{
+        frame = {{
+          audience: `正在考虑「${{topicName}}」的人`,
+          trap: '只盯着表面的价格、颜值或者卖点，忽略了后面真正影响体验的细节',
+          shift: '先判断自己的真实需求，再看这个选择值不值得',
+          scene: '你当下觉得很心动，真正用起来才发现有些地方根本不适合自己',
+          action1: '先写下你最在意的三个使用场景',
+          action2: '把每个选择放到真实场景里比较',
+          action3: '只为长期会用到的价值买单',
+          result: '你会少花冤枉钱，也少为冲动选择后悔'
+        }};
+      }} else if (has(['孩子','父母','家庭','教育','妈妈','爸爸','亲子','婚姻','关系'])) {{
+        frame = {{
+          audience: `正在面对「${{topicName}}」的人`,
+          trap: '一着急就想控制结果，却忘了先看见对方真正需要什么',
+          shift: '先把沟通从情绪里拿出来，再去解决具体问题',
+          scene: '你越想把事情讲清楚，对方越抗拒，最后两个人都只记住了不舒服',
+          action1: '先停十秒，不急着下判断',
+          action2: '把指责换成一个具体请求',
+          action3: '只讨论下一步怎么做，不翻旧账',
+          result: '关系会从互相消耗，慢慢变成可以一起解决问题'
+        }};
+      }}
+      return [
+        `${{frame.audience}}，先别急着照着别人做。`,
+        `真正让你卡住的，往往不是你不知道这件事重要，而是你一直陷在一个误区里：${{frame.trap}}。`,
+        `换个角度看，关键不是多知道一点，而是${{frame.shift}}。`,
+        `你可以想象一个很具体的画面：${{frame.scene}}。这时候，再多道理都不如一个清晰动作有用。`,
+        `所以从今天开始，先做三件事。第一，${{frame.action1}}。第二，${{frame.action2}}。第三，${{frame.action3}}。`,
+        `当你能把这三步跑通，${{frame.result}}。`,
+        `如果你现在也卡在「${{topicName}}」这里，评论区告诉我你最卡的是哪一步，我下一条直接给你拆做法。`
+      ].join('\\n\\n');
+    }}
+
+    function makeQingdouStyleScript(x, topic, sentences) {{
+      const original = (x.fullText || x.transcriptPreview || x.title || '').trim();
+      const source = legacySafe(`${{topic}} ${{original}} ${{(x.elements || []).join(' ')}}`);
+      const topicName = safeClip(topic || linkTopic(x.title || '', original), 14) || '这件事';
+      const has = (words) => words.some(word => source.toLowerCase().includes(String(word).toLowerCase()));
+      const first = polishSentence(sentences[0] || x.title || topicName);
+      if (has(['cloud code','code x','claude','codex','ai','人工智能','智能体','编程','产品','工具','专业知识'])) {{
+        return finalDeepScriptGuard([
+          `当你真正开始使用 Cloud Code、Code X 或类似 AI 工具的那一刻，你打开的不是一个普通软件，而是一套全新的能力系统。`,
+          `过去很多看起来必须依赖专业团队、长期学习和大量试错的事情，现在都可以被你调动起来，变成你手里的创作资源。`,
+          `你会发现，专业知识不再只是少数人的门槛，它可以被提问、被组合、被执行，最后变成一个真实可用的产品、方案或工作流。`,
+          `所以真正重要的不是“我会不会所有技术”，而是你能不能把一个想法讲清楚，把需求拆明白，再让 AI 帮你一步一步落地。`,
+          `从这一刻开始，普通人最大的机会不是替代别人，而是把自己的经验、判断和想象力放大。你越敢提出问题，越敢验证结果，就越容易进入 AI 的新世界。`,
+          `如果你也想把 AI 变成自己的生产力，从今天开始别只围观，先拿一个真实需求试一次：写清楚目标，拆出步骤，做出第一个能被别人看见的小成果。`
+        ].join('\\n\\n'), source);
+      }}
+      if (has(['账号','内容','自媒体','流量','粉丝','变现','成交','客户','个人品牌','ip','获客','短视频'])) {{
+        return finalDeepScriptGuard([
+          `如果你正在做账号、做内容、做个人品牌，先别急着问下一条拍什么。`,
+          `真正决定用户会不会记住你的，不是你发得有多勤，也不是你用了多少热门模板，而是他能不能在几秒钟内听懂：你到底帮谁，解决什么问题，为什么值得相信。`,
+          `很多内容看起来热闹，播放也许会有波动，但用户看完以后没有留下理由。他不知道你是谁，不知道你能帮他什么，更不知道下一次为什么还要回来找你。`,
+          `表达上可以换一种讲法：先把用户最卡的场景说出来，再指出他一直误会的地方，最后给一个马上能执行的动作。不要只讲观点，要让对方看见自己，也看见下一步。`,
+          `你今天可以先做三件事。第一，用一句话写清楚你的服务对象。第二，用一个具体案例证明你的判断。第三，在结尾给用户一个明确问题，让他愿意评论，也愿意继续关注。`,
+          `内容的本质不是把话说满，而是把信任一点点搭起来。当用户开始觉得“这个人懂我，也真的能帮我”，你的流量才有机会变成关系，关系才有机会变成转化。`
+        ].join('\\n\\n'), source);
+      }}
+      if (has(['学习','考试','课程','知识','读书','方法','效率','训练','练习'])) {{
+        return finalDeepScriptGuard([
+          `如果你也在学习一件新东西，先不要把自己困在“我要准备到完美”里面。`,
+          `真正拉开差距的，往往不是谁收藏了更多资料，而是谁能更快把信息变成练习，把练习变成反馈。`,
+          `你看过很多方法，当下觉得很有道理，可一旦回到自己的生活里，又不知道从哪里开始。问题不在你不够努力，而是你缺少一个能立刻执行的小动作。`,
+          `所以接下来只做一件事：选一个最关键的知识点，用自己的话讲出来，马上做一次验证。不要等状态最好，也不要等资料最全。`,
+          `当你开始用输出倒逼理解，用反馈修正方向，你会从“我好像懂了”，慢慢变成“我真的会用了”。`,
+          `如果你现在也卡在学习和行动之间，评论区告诉我你最想学会哪一件事，我下一条直接给你拆执行步骤。`
+        ].join('\\n\\n'), source);
+      }}
+      if (has(['职场','工作','老板','同事','工资','副业','创业','面试','简历'])) {{
+        return finalDeepScriptGuard([
+          `如果你正在工作里反复消耗，先别急着否定自己。`,
+          `很多时候，你不是没有价值，而是一直在等别人主动看见你的价值。你做了很多事，却没有把结果讲清楚；你承担了很多责任，却没有把边界立起来。`,
+          `真正需要改变的，是你表达价值的方式。不要只说“我很努力”，要说清楚你解决了什么问题，带来了什么结果，下一步还能继续创造什么。`,
+          `从今天开始，把最近做过的事情整理成三类：结果、证据、下一步。每一次沟通都围绕这三类展开，你就不会只是在被动等待评价。`,
+          `当你能把自己的价值说清楚，你就会从等机会，变成争取机会；从害怕被替换，变成拥有选择权。`,
+          `如果你也想把工作里的主动权拿回来，先把你最近最拿得出手的一个结果写下来。`
+        ].join('\\n\\n'), source);
+      }}
+      const middle = sentences.slice(1, 4).map(polishSentence).filter(Boolean).join('。');
+      return finalDeepScriptGuard([
+        `如果你正在关注「${{topicName}}」，先把这句话听完。`,
+        `这件事真正有价值的地方，不只是${{first || '表面的信息'}}，而是它提醒你：很多问题不能只停在“我知道了”，还要变成一个能被执行的动作。`,
+        middle ? `你可以把它放进一个更具体的场景里看：${{middle}}。当这个场景被说清楚，用户才会觉得这不是一句空话，而是跟自己有关。` : `你可以把它放进自己的真实场景里看：你以为差的是更多信息，其实差的是一个清晰判断和下一步动作。`,
+        `接下来，表达上不要只复述原来的说法，而要把意思讲得更完整：先用一句强判断把人停住，再用一个具体画面让人代入，最后给出一个可以马上照做的方法。`,
+        `你今天就可以这样做：第一，把「${{topicName}}」里最关键的问题写下来。第二，用自己的话讲清楚它为什么重要。第三，把它拆成一个小动作，今天就完成一次。`,
+        `真正好的短视频，不是让人听完觉得“好像很厉害”，而是让人听完知道“我现在可以先做什么”。`,
+        `如果你也卡在「${{topicName}}」这件事上，评论区告诉我你最想先解决哪一步，我下一条继续拆给你看。`
+      ].join('\\n\\n'), source);
+    }}
+
+    function makeViralRecreation(x) {{
+      const original = (x.fullText || x.transcriptPreview || x.title || '').trim();
+      const sentences = splitSentences(original, 12).map(legacySafe);
+      const title = x.title || sentences[0] || '爆款短视频二创';
+      const topic = deepTopic(x);
+      const hook = sentences[0] || legacySafe(title) || `这条内容最值得看的不是表面信息，而是它给出的判断`;
+      const action = sentences.find(s=>/评论|收藏|关注|转发|点赞|方法|步骤|试试|记住|建议/.test(s)) || `最后给一个明确动作，让用户知道看完以后该做什么。`;
+      const structure = [
+        `开头借鉴：先用「${{hook.slice(0, 42)}}」这类强判断/强痛点停住用户。`,
+        `中段借鉴：围绕「${{topic}}」保留原视频的信息顺序，但换成新的表达和例子。`,
+        `结尾借鉴：把「${{action.slice(0, 42)}}」改成你账号能承接的互动问题。`
+      ];
+      const newTitle = legacySafe(`${{topic}}，这条内容换个角度更容易被看完`);
+      const cover = [safeClip(topic, 10), '这点最关键', '看完再决定'];
+      const script = makeQingdouStyleScript(x, topic, sentences);
+      return {{
+        title: newTitle,
+        cover,
+        script,
+        structure,
+        originalHook: hook,
+        note: `${{x.transcriptSource || '提取文案'}}生成智能二创，保留语义和爆点，重新组织表达，不复制原句。`
+      }};
+    }}
+
+    function viralSummaryItems(x) {{
+      const text = x.fullText || x.transcriptPreview || x.title || '';
+      const sentences = splitSentences(text, 4).map(legacySafe);
+      const topic = x.pain || linkTopic(x.title || '', text);
+      const items = [
+        `核心主题：${{legacySafe(topic)}}`,
+        sentences[0] ? `开场信息：${{sentences[0]}}` : `识别标题：${{legacySafe(x.title || '待拆解短视频')}}`,
+        sentences[1] ? `内容推进：${{sentences[1]}}` : '内容推进：先给判断，再补场景，最后给动作。',
+        `可复用点：${{(x.elements || [])[0] || '强开场 + 具体场景 + 明确行动'}}`
+      ];
+      return items.slice(0,3);
+    }}
+
+    function viralDurationLabel(x) {{
+      const raw = x.duration || x.durationSec || x.videoDuration || x.video_duration || x.stats?.duration || '';
+      const num = Number(raw || 0);
+      if (!num) return '未识别';
+      const sec = num > 1000 ? Math.round(num / 1000) : Math.round(num);
+      if (sec >= 60) return `${{Math.floor(sec / 60)}}分${{String(sec % 60).padStart(2,'0')}}秒`;
+      return `${{sec}}秒`;
+    }}
+
+    function renderQingdouExtract(x) {{
+      const text = x.fullText || x.transcriptPreview || '当前链接未提取到文案内容';
+      const cover = coverDisplaySrc(x.coverImage || x.coverSource || '', x.id || x.title || '');
+      const summary = viralSummaryItems(x);
+      const source = x.source || x.transcriptSource || '链接分析';
+      return `
+        <div class="qd-card">
+          <div class="qd-head">
+            <div class="qd-tabs">
+              <span class="qd-tab active">本次提取</span>
+              <span class="qd-tab">历史结果</span>
+              <span class="qd-tab">提取列表</span>
+            </div>
+            <div class="qd-actions">
+              <button class="secondary" onclick="archiveViralById('${{esc(x.id || '')}}')">保存归档</button>
+              <button class="secondary" onclick="copyViralTranscript('${{esc(x.id || '')}}')">复制文案</button>
+              <button class="secondary" onclick="exportViralTranscript('${{esc(x.id || '')}}')">导出文案</button>
+            </div>
+          </div>
+          <table class="qd-table">
+            <thead><tr><th style="width:28%">视频</th><th style="width:34%">文案内容</th><th style="width:22%">全文摘要</th><th style="width:16%">操作</th></tr></thead>
+            <tbody>
+              <tr>
+                <td>
+                  <div class="qd-video-cell">
+                    <div class="qd-thumb">${{cover ? `<img src="${{esc(cover)}}" alt="短视频封面" loading="lazy" referrerpolicy="no-referrer">` : '封面'}}</div>
+                    <div>
+                      <div class="qd-video-title">${{esc(x.title || '已提取短视频')}}</div>
+                      <div class="qd-video-meta">${{esc(source)}}<br>视频时长：${{esc(viralDurationLabel(x))}}</div>
+                    </div>
+                  </div>
+                </td>
+                <td><div class="qd-copy-preview">${{esc(text)}}</div></td>
+                <td>
+                  <details open>
+                    <summary>查看</summary>
+                    <ul class="qd-summary-list">${{summary.map(item=>`<li>${{esc(item)}}</li>`).join('')}}</ul>
+                  </details>
+                </td>
+                <td>
+                  <div class="qd-actions">
+                    <button class="secondary" onclick="copyViralTranscript('${{esc(x.id || '')}}')">复制文案</button>
+                    <button class="secondary" onclick="scrollViralAi('${{esc(x.id || '')}}')">智能二创</button>
+                  </div>
+                  <details class="qd-more"><summary>更多</summary><div class="muted">可继续做深度拆解、封面对照、归档复用。</div></details>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>`;
+    }}
+
+    function getViralAiOutputText(id='') {{
+      const key = id || 'current';
+      return document.getElementById(`viralAiOutput-${{key}}`)?.textContent?.trim() || '';
+    }}
+
+    function renderViralRecreation(x) {{
+      const recreation = makeViralRecreation(x);
+      const original = x.fullText || x.transcriptPreview || '当前链接未提取到原文案。';
+      const key = x.id || 'current';
+      return `
+        <div class="qd-ai-layout" id="viralAiBlock-${{esc(key)}}">
+          <div class="qd-ai-input">
+            <div class="qd-tabs"><span class="qd-tab">所有模板</span><span class="qd-tab active">当前模板</span></div>
+            <div class="qd-template-title">智能二创</div>
+            <div class="muted">内容要求（必填） · 建议 1500 字以内，超出后结果可能不精准</div>
+            <div class="qd-textarea">${{esc(original)}}</div>
+            <div class="qd-char-row"><span>粘贴 · 清空</span><span>${{Math.min(original.length, 3000)}} / 3000</span></div>
+            <button class="primary qd-generate" onclick="rerenderViralAi('${{esc(key)}}')">重新创作</button>
+            <div class="qd-output-label">内容由 AI 生成</div>
+          </div>
+          <div class="qd-ai-output">
+            <div class="qd-output-paper" id="viralAiOutput-${{esc(key)}}">${{esc(recreation.script)}}</div>
+            <div class="qd-output-label">内容由 AI 生成</div>
+            <div class="qd-output-actions">
+              <button class="secondary" onclick="sendViralRecreationToOptimizer('${{esc(x.id || '')}}')">编辑文案</button>
+              <button class="secondary" onclick="copyViralRecreation('${{esc(x.id || '')}}')">复制文案</button>
+              <button class="secondary" onclick="polishViralRecreation('${{esc(x.id || '')}}')">智能润色</button>
+              <button class="secondary" onclick="archiveViralById('${{esc(x.id || '')}}')">保存归档</button>
+              <button class="secondary" disabled title="本地版暂未接入配音服务">AI配音</button>
+            </div>
+          </div>
+        </div>`;
+    }}
+
+    function viralRecordById(id) {{
+      if (id) return viralArchives().find(x=>x.id === id) || (state.lastViralAnalysis?.id === id ? state.lastViralAnalysis : null);
+      return state.lastViralAnalysis || null;
+    }}
+
+    window.copyViralTranscript = async function(id='') {{
+      const record = viralRecordById(id);
+      if (!record) return;
+      await navigator.clipboard.writeText(record.fullText || record.transcriptPreview || '');
+    }}
+
+    window.exportViralTranscript = function(id='') {{
+      const record = viralRecordById(id);
+      if (!record) return;
+      const text = [
+        `标题：${{record.title || ''}}`,
+        `来源：${{record.source || ''}}`,
+        `链接：${{record.url || ''}}`,
+        '',
+        record.fullText || record.transcriptPreview || ''
+      ].join('\\n');
+      const blob = new Blob([text], {{ type:'text/plain;charset=utf-8' }});
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `${{(record.title || '提取文案').slice(0,18).replace(/[\\\\/:*?"<>|]/g,'_')}}.txt`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }}
+
+    window.scrollViralAi = function(id='') {{
+      const key = id || 'current';
+      document.getElementById(`viralAiBlock-${{key}}`)?.scrollIntoView({{ behavior:'smooth', block:'start' }});
+    }}
+
+    window.archiveViralById = function(id='') {{
+      const record = viralRecordById(id);
+      if (!record) return;
+      const items = viralArchives().filter(x=>x.id !== record.id && x.title !== record.title);
+      items.unshift(record);
+      saveViralArchives(items);
+      renderViralArchiveList();
+    }}
+
+    window.rerenderViralAi = function(id='') {{
+      const record = viralRecordById(id);
+      if (!record) return;
+      const recreation = makeViralRecreation(record);
+      const key = id || 'current';
+      const el = document.getElementById(`viralAiOutput-${{key}}`);
+      if (el) el.textContent = recreation.script;
+    }}
+
+    window.polishViralRecreation = function(id='') {{
+      const record = viralRecordById(id);
+      if (!record) return;
+      const recreation = makeViralRecreation(record);
+      const key = id || 'current';
+      const el = document.getElementById(`viralAiOutput-${{key}}`);
+      const base = el?.textContent?.trim() || recreation.script;
+      const polished = finalDeepScriptGuard(base
+        .replace(/你会发现/g, '你很快会发现')
+        .replace(/真正重要的/g, '更关键的是')
+        .replace(/所以/g, '接下来')
+        .replace(/从今天开始/g, '现在就从一个小动作开始'), record.fullText || record.transcriptPreview || record.title || '');
+      if (el) el.textContent = polished;
+    }}
+
+    window.copyViralRecreation = async function(id='') {{
+      const record = viralRecordById(id);
+      if (!record) return;
+      const recreation = makeViralRecreation(record);
+      await navigator.clipboard.writeText(getViralAiOutputText(id) || recreation.script || '');
+    }}
+
+    window.sendViralRecreationToOptimizer = function(id='') {{
+      const record = viralRecordById(id);
+      if (!record) return;
+      const recreation = makeViralRecreation(record);
+      $('#draftTitle').value = recreation.title;
+      $('#draftText').value = getViralAiOutputText(id) || recreation.script;
+      $('#draftTheme').value = record.theme || themeOf(recreation.title, recreation.script);
+      switchView('optimizer');
+      analyzeDraft();
+    }}
+
+    function renderViralArchiveList() {{
+      const items = viralArchives();
+      const list = $('#viralArchiveList');
+      if (list) {{
+        list.innerHTML = items.length ? items.map(x=>`
+          <div class="archive-item">
+            <strong>${{esc(x.title)}}</strong>
+            <div class="muted">${{esc(x.theme)}} · 爆款潜力 ${{x.avg}} · ${{esc(x.createdAt)}}</div>
+            <details class="archive-details">
+              <summary>查看拆解详细内容</summary>
+              <div class="result"><b>来源链接：</b>${{x.url ? `<a href="${{esc(x.url)}}" target="_blank" rel="noreferrer">${{esc(x.url)}}</a>` : '本地分析'}}</div>
+              ${{x.stats ? `<div class="result"><b>链接数据：</b>播放 ${{fmt(x.stats.play)}} · 点赞 ${{fmt(x.stats.likes)}} · 评论 ${{fmt(x.stats.comments)}} · 收藏 ${{fmt(x.stats.collects)}} · 分享 ${{fmt(x.stats.shares)}}</div>` : ''}}
+              <div class="result"><b>核心痛点：</b>${{esc(x.pain || '未记录')}}</div>
+              <div class="result"><b>提取文案功能：</b>${{renderQingdouExtract(x)}}</div>
+              <div class="result"><b>爆款元素：</b><br>${{(x.elements || []).map((item, i)=>`${{i+1}}. ${{esc(item)}}`).join('<br>') || '未记录'}}</div>
+              <div class="result"><b>深度拆解：</b>${{renderViralDeepDive(x)}}</div>
+              <div class="result"><b>封面图与拆解建议：</b>${{renderCoverCompare(x)}}</div>
+              <div class="result"><b>提取文案并二创：</b>${{renderViralRecreation(x)}}</div>
+              <div class="copybox"><b>可复用模板：</b><br>${{esc(x.template || '未记录')}}</div>
+            </details>
+            <div class="actions"><button class="secondary" onclick="useArchivedCaseInIdeas('${{esc(x.id)}}')">用于选题生成</button><button class="secondary" onclick="deleteViralArchive('${{esc(x.id)}}')">删除</button></div>
+          </div>`).join('') : '<div class="result muted">归档后的拆解会出现在选题生成器里，可选择套用。</div>';
+      }}
+      const select = $('#ideaViralCase');
+      if (select) {{
+        const current = select.value;
+        select.innerHTML = '<option value="">不套用爆款案例</option>' + items.map(x=>`<option value="${{esc(x.id)}}">${{esc(x.title.slice(0,28))}}｜${{esc(x.theme)}}｜${{x.avg}}分</option>`).join('');
+        if (items.some(x=>x.id === current)) select.value = current;
+      }}
+    }}
+
+    window.useArchivedCaseInIdeas = function(id) {{
+      switchView('ideas');
+      renderViralArchiveList();
+      $('#ideaViralCase').value = id;
+      generateIdeas();
+    }}
+
+    window.deleteViralArchive = function(id) {{
+      saveViralArchives(viralArchives().filter(x=>x.id !== id));
+      renderViralArchiveList();
+      generateIdeas();
+    }}
+
+    function hookLine(formula, topic, theme, pain) {{
+      const themeName = (theme || '').split('/')[0] || '清醒成长';
+      const clean = cleanTopic(topic || pain || themeName);
+      const careerMode = isCareerTheme(theme, pain || clean);
+      const replacements = {{
+        pain: pain || clean,
+        truth: careerMode ? '你还没有建立让用户相信你的内容资产' : theme.includes('追星') ? '你在追一个不敢活出的自己' : theme.includes('情绪') ? '你缺的不是钝感，而是边界' : '你把自己放得太靠后',
+        loss: careerMode ? '用户对你的信任和成交机会' : theme.includes('追星') ? '自己的生命力' : '你自己的边界和主动权',
+        wrong: careerMode ? '只要多发作品就会自然涨粉' : theme.includes('追星') ? '单纯喜欢一个人' : '你不够好',
+        scene: careerMode ? `每天都在发内容，却说不清自己帮谁解决什么问题` : `明明已经不舒服了，还要替别人找理由`,
+        desire: careerMode ? '可持续被看见、被信任、被选择的个人品牌' : '你真正想要的自由和松弛'
+      }};
+      return formula.pattern.replace(/{{(pain|truth|loss|wrong|scene|desire)}}/g, (_, key)=>replacements[key]);
+    }}
+
+    function plainRewriteText(title, text, theme) {{
+      const pain = inferCorePain(title, text, theme);
+      const line = hookLine(hookById($('#draftHook')?.value), title, theme, pain);
+      if (isCareerTheme(theme, pain + text + title)) {{
+        return [
+          line,
+          '',
+          `说白了，${{pain}}，不是因为你不努力，也不是因为你不会用工具，而是用户还没有在你的内容里看到足够明确的价值。`,
+          '',
+          '你要先让别人知道三件事：第一，你到底帮谁；第二，你解决什么具体问题；第三，为什么这件事可以相信你。',
+          '',
+          '所以别一上来就追热点、堆技巧、发很多看起来很努力的内容。先把你的能力拆成用户能看懂的三类内容：误区内容、方法内容、案例内容。',
+          '',
+          '今天你就做一个动作：写一句话，讲清楚“我帮助哪类人，用什么方法，解决什么问题”。这句话清楚了，你后面的标题、封面、文案和选题才不会散。',
+          '',
+          '最后直接问用户：你现在做账号，最卡的是定位、内容，还是信任？评论区告诉我，我下一条继续拆。'
+        ].join('\\n');
+      }}
+      return [
+        line,
+        '',
+        `说白了，${{pain}}，最难受的不是事情本身，而是你已经不舒服了，还在说服自己别计较。`,
+        '',
+        '你不用把话讲得很高级，也不用绕很多弯。用户真正想听的是：我为什么会这样，我到底该怎么办。',
+        '',
+        '所以这条视频可以这么讲：第一，先把那个扎心场景说出来。第二，告诉她这不是她太矫情，而是她的边界被碰到了。第三，给她一个今天就能做的小动作。',
+        '',
+        '你可以从一句话开始练：我先确认一下，我是不是真的愿意。别小看这句话，它是在帮你把选择权拿回来。',
+        '',
+        '最后别讲大道理，直接问她：你有没有也在关系里这样委屈过自己？'
+      ].join('\\n');
+    }}
+
+    function viralScores(title, text) {{
+      const hay = `${{title}} ${{text}}`;
+      const countAny = (arr) => arr.reduce((n,w)=>n+(hay.includes(w)?1:0),0);
+      return {{
+        hook: Math.min(96, 45 + countAny(['你','为什么','其实','不是','别','总是','有没有','先说结论'])*8),
+        conflict: Math.min(96, 42 + countAny(['不是','而是','其实','反而','真正','别再','失去','委屈'])*7),
+        structure: Math.min(96, 40 + countAny(['第一','第二','第三','所以','因为','答案','最后'])*8 + (text.length > 180 ? 12 : 0)),
+        action: Math.min(96, 40 + countAny(['做','练习','问自己','评论区','收藏','转发','今天'])*7),
+        cover: Math.min(96, 48 + (title.length <= 24 ? 20 : 0) + (/[你别不]/.test(title) ? 12 : 0))
+      }};
+    }}
+
+    function renderHookFormulas() {{
+      if (!$('#hookFormulaList')) return;
+      $('#hookFormulaList').innerHTML = hookFormulas.map(f=>`
+        <div class="formula-card">
+          <strong>${{esc(f.name)}}</strong>
+          <code>${{esc(f.pattern)}}</code>
+          <div class="muted">${{esc(f.use)}}</div>
+        </div>`).join('');
+    }}
+
+    function themeOf(title, text) {{
+      const hay = `${{title}} ${{text}}`;
+      const rules = [
+        ['AI超级个体/个人品牌', ['AI','超级个体','个人品牌','个人IP','IP','智能体','内容管理','自媒体','账号','信任','副业','获客','变现']],
+        ['追星心理/理想自我', ['王一博','追星','偶像','粉','投射','代偿']],
+        ['边界感/反讨好', ['讨好','顺从','边界','关系','失去','拒绝']],
+        ['女性成长/自我觉醒', ['女性','成长','自己','人生','自由','觉醒']],
+        ['情绪管理/内核稳定', ['情绪','稳定','敏感','内耗','治愈']],
+        ['行动力/破碎重建', ['行动','打碎','重建','苦','开始','破碎']],
+        ['文学哲思/独处', ['木心','独处','日月','读懂']]
+      ];
+      let best = ['综合清醒文案', 0];
+      rules.forEach(([name, keys]) => {{
+        const score = keys.reduce((n,k)=>n+(hay.includes(k)?1:0),0);
+        if (score > best[1]) best = [name, score];
+      }});
+      return best[0];
+    }}
+
+    function isCareerTheme(theme, pain='') {{
+      const hay = `${{theme}} ${{pain}}`;
+      return /AI|超级个体|个人品牌|个人IP|\\bIP\\b|智能体|内容管理|自媒体|账号|定位|信任|副业|获客|变现|成交|商业|创业|流量|客户|粉丝/.test(hay);
+    }}
+
+    function scoreDraft(title, text) {{
+      const hookWords = ['你','为什么','有没有','其实','不是','才是','别','总被','恭喜'];
+      const emotionWords = ['害怕','自由','勇敢','清醒','委屈','值得','破碎','热烈','稳定','内耗','治愈'];
+      const structureWords = ['不是','其实','你以为','答案','所以','真正','因为','第一','第二','第三'];
+      const count = (arr, hay) => arr.reduce((n,w)=>n+(hay.includes(w)?1:0),0);
+      const hay = title + text;
+      let hook = 45 + Math.min(32, count(hookWords, title + text.slice(0,80))*8);
+      if (/[？?]/.test(title)) hook += 8;
+      if (title.length >= 8 && title.length <= 24) hook += 8;
+      let structure = 45 + Math.min(32, count(structureWords, text)*5);
+      if (text.length > 180 && text.length < 560) structure += 8;
+      let emotion = 42 + Math.min(36, count(emotionWords, hay)*6);
+      let cover = 52 + (title.length <= 24 ? 22 : -6) + (/[你别不]/.test(title) ? 10 : 0);
+      const total = Math.max(35, Math.min(96, Math.round(hook*.28 + structure*.30 + emotion*.24 + cover*.18)));
+      return {{ total, hook:Math.min(100,Math.round(hook)), structure:Math.min(100,Math.round(structure)), emotion:Math.min(100,Math.round(emotion)), cover:Math.min(100,Math.round(cover)) }};
+    }}
+
+    function titleVariants(title, theme) {{
+      const core = title.replace(/#\\S+/g,'').trim() || '把自己活回来';
+      const map = {{
+        'AI超级个体/个人品牌': ['普通人做 AI 超级个体，先别急着发作品', '你的账号做不起来，不是不会发，是没人信你', '个人品牌变现前，先让用户知道你能解决什么'],
+        '追星心理/理想自我': ['你追的不是偶像，是不敢活的自己', '越喜欢他，越暴露你想成为谁', '别只追光，把自己也点亮'],
+        '边界感/反讨好': ['你越懂事，别人越敢亏待你', '别再用讨好，保护你的害怕', '真正的边界，是敢让别人不高兴'],
+        '女性成长/自我觉醒': ['别急着变好，先把自己还给自己', '你不是来陪跑的，你是来改命的', '真正的成长，是不再低配自己'],
+        '情绪管理/内核稳定': ['不被带节奏，才是真稳定', '情绪上头前，先把方向盘拿回来', '敏感不是错，失控才是'],
+        '行动力/破碎重建': ['别等最佳时机，先从废墟里开花', '你不是没状态，是还没开始', '破碎不是失败，是旧版本卸载'],
+        '文学哲思/独处': ['人都逃不过这四步', '独处不是孤独，是回到自己', '读懂这句话，你就不急了']
+      }};
+      return [core, ...(map[theme] || map['女性成长/自我觉醒'])].slice(0,4);
+    }}
+
+    function coverLines(title, theme) {{
+      const variants = titleVariants(title, theme);
+      return variants.map(v => {{
+        const short = v.replace(/[，。？?]/g,' ').split(/\\s+/).filter(Boolean);
+        if (isCareerTheme(theme)) return ['别急着发作品','先建立信任资产', theme.split('/')[0]];
+        if (theme.includes('追星')) return ['你追的不是他','是不敢活的自己','追星心理'];
+        if (theme.includes('讨好')) return ['别再讨好','你不是来交房租的','边界感'];
+        if (theme.includes('情绪')) return ['不被带节奏','才是真稳定','内核稳定'];
+        return [short[0] || v.slice(0,8), short.slice(1).join('') || '把自己活回来', theme.split('/')[0]];
+      }});
+    }}
+
+    function themeClass(theme) {{
+      if (theme.includes('追星')) return 'theme-star';
+      if (theme.includes('边界') || theme.includes('讨好')) return 'theme-boundary';
+      if (theme.includes('女性') || theme.includes('成长')) return 'theme-growth';
+      if (theme.includes('情绪') || theme.includes('内核')) return 'theme-emotion';
+      if (theme.includes('行动') || theme.includes('重建')) return 'theme-action';
+      if (theme.includes('文学') || theme.includes('独处')) return 'theme-literary';
+      return '';
+    }}
+
+    function scriptAdvice(title, text, theme) {{
+      if (isCareerTheme(theme, title + text)) {{
+        return [
+          `3 秒钩子：先说“${{titleVariants(title, theme)[1]}}”，不要先介绍背景。`,
+          '中段结构：用户卡点 1 句 + 常见误区 1 句 + 你的方法 3 点 + 今天动作 1 个。',
+          '信任设计：必须说清楚“我帮谁、解决什么问题、凭什么相信我”。',
+          text.length < 160 ? '文案偏短，建议补一个具体案例或操作步骤，否则像口号不像方法。' : '文案长度够用，下一步重点是删掉泛泛表达，让每 5 秒都有一个可执行信息点。'
+        ];
+      }}
+      return [
+        `3 秒钩子：先说“${{titleVariants(title, theme)[1]}}”，不要先铺垫。`,
+        '中段结构：现象 1 句 + 误区 1 句 + 真相 2 句 + 行动建议 1 句。',
+        '结尾互动：问一句“你是在讨好别人，还是在压抑自己？”这类能让用户评论自己的问题。',
+        text.length < 160 ? '文案偏短，建议补一个具体场景，否则只有金句没有信任感。' : '文案长度够用，下一步重点是删掉重复表达，让每 5 秒都有一个信息点。'
+      ];
+    }}
+
+    function fallbackCoverExamples() {{
+      const pool = [
+        ['你越懂事','越没人心疼','#fb5f87','真人口播'],
+        ['别再讨好','你不是来交房租的','#f6c453','口播干货'],
+        ['太敏感不是错','这是你的天赋','#22d3ee','真人讲述'],
+        ['你追的不是他','是不敢活的自己','#a78bfa','出镜口播'],
+        ['别等准备好','先开始再说','#34d399','老师口播'],
+        ['把自己活回来','从停止内耗开始','#4f7bff','人物封面']
+      ].sort(()=>Math.random()-.5);
+      return pool.map(([a,b,color,tag])=>{{
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="720" height="960" viewBox="0 0 720 960">
+          <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#07101f"/><stop offset="1" stop-color="#18213b"/></linearGradient></defs>
+          <rect width="720" height="960" fill="url(#g)"/><rect x="54" y="68" width="612" height="824" rx="34" fill="#0d1424" stroke="${{color}}" stroke-width="4"/>
+          <circle cx="360" cy="164" r="54" fill="${{color}}" opacity=".35"/><circle cx="360" cy="156" r="34" fill="#dfeaff"/><path d="M276 286c22-70 146-70 168 0" fill="#dfeaff" opacity=".9"/>
+          <rect x="88" y="112" width="248" height="42" rx="21" fill="${{color}}" opacity=".9"/><text x="108" y="141" fill="#fff" font-size="24" font-family="Arial, sans-serif" font-weight="700">真人口播案例</text>
+          <text x="92" y="334" fill="#fff" font-size="72" font-family="Arial, sans-serif" font-weight="900">${{a}}</text><text x="92" y="434" fill="#fff" font-size="72" font-family="Arial, sans-serif" font-weight="900">${{b}}</text>
+          <text x="92" y="540" fill="${{color}}" font-size="42" font-family="Arial, sans-serif" font-weight="900">人物近景 + 大字冲突</text>
+        </svg>`;
+        return {{ title:`${{a}} / ${{b}}`, tag, source:'本地真人口播版式', image:'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg), pattern:'真人出镜口播：半身人物 + 大字冲突 + 栏目标签' }};
+      }});
+    }}
+
+    function renderCoverExamples(target, data) {{
+      const examples = (data?.examples?.length ? data.examples : fallbackCoverExamples()).slice(0,6);
+      const note = data?.updatedAt ? `实时更新：${{esc(data.updatedAt)}}` : '本地刷新：每次打开随机更新';
+      target.innerHTML = `
+        <div class="result"><b>真人出镜口播热门案例图：</b><span class="muted"> ${{note}}</span><br><span class="muted">只保留真人/人物/老师/课程讲解/口播倾向案例，重点看“人物近景 + 大字冲突 + 少信息”。</span></div>
+        <div class="cover-trends">
+          ${{examples.map(x=>`
+            <div class="cover-example">
+              <img src="${{esc(x.image)}}" alt="${{esc(x.title || '封面案例')}}" loading="lazy" referrerpolicy="no-referrer">
+              <div class="cover-example-body">
+                <div class="cover-example-title">${{esc(x.title || x.tag || '热门封面案例')}}</div>
+                <div class="cover-example-meta">${{esc(x.pattern || '大标题 + 强对比 + 明确主题')}}</div>
+                <div class="cover-example-meta">${{x.sourceUrl ? `<a href="${{esc(x.sourceUrl)}}" target="_blank" rel="noreferrer">${{esc(x.source || '来源')}}</a>` : esc(x.source || '本地案例')}}</div>
+              </div>
+            </div>`).join('')}}
+        </div>`;
+    }}
+
+    async function loadCoverExamples(theme) {{
+      const target = $('#coverExamples');
+      if (!target) return;
+      renderCoverExamples(target, null);
+      try {{
+        const res = await fetch(apiUrl(`/api/cover-examples?theme=${{encodeURIComponent(theme || '')}}&t=${{Date.now()}}`), apiOptions({{ cache:'no-store' }}));
+        if (!res.ok) throw new Error('cover api failed');
+        const data = await res.json();
+        renderCoverExamples(target, data);
+      }} catch (err) {{
+        renderCoverExamples(target, null);
+      }}
+    }}
+
+    function inferCorePain(title, text, theme) {{
+      const hay = `${{title}} ${{text}}`;
+      if (isCareerTheme(theme, hay)) {{
+        if (hay.includes('信任')) return '想做账号，但用户不知道为什么要相信你';
+        if (hay.includes('定位') || hay.includes('人设')) return '想做个人品牌，但定位和人设不够清楚';
+        if (hay.includes('变现') || hay.includes('成交') || hay.includes('获客')) return '有内容想变现，但缺少清晰的信任和成交路径';
+        return '想成为 AI 超级个体，但不知道怎么把能力变成可持续内容资产';
+      }}
+      if (hay.includes('讨好') || theme.includes('讨好')) return '总是在关系里讨好别人，却把自己放到最后';
+      if (hay.includes('敏感') || hay.includes('内耗') || theme.includes('情绪')) return '明明感受很强，却总被说太敏感';
+      if (hay.includes('追星') || hay.includes('王一博') || theme.includes('追星')) return '把对偶像的喜欢，投射成自己不敢活出的样子';
+      if (hay.includes('边界') || hay.includes('拒绝')) return '不敢拒绝别人，害怕一说不就失去关系';
+      if (hay.includes('破碎') || hay.includes('行动') || theme.includes('行动')) return '知道该改变，却迟迟没有开始';
+      if (hay.includes('独处') || theme.includes('文学')) return '在人群里消耗太久，忘了怎么回到自己';
+      const source = String(text || title || '').replace(/#\\S+/g, ' ').replace(/\\s+/g, ' ').trim();
+      const firstSentence = source.split(/[。！？!?\\n]/).map(x=>x.trim()).filter(Boolean)[0] || '';
+      if (firstSentence.length >= 6) return firstSentence.slice(0, 42);
+      return '该链接的真实文案痛点不够明确，需要先补充可读标题或字幕';
+    }}
+
+    function optimizedScript(title, text, theme, scores) {{
+      const titles = titleVariants(title, theme);
+      const mainTitle = titles[1] || titles[0] || title || '把自己活回来';
+      const pain = inferCorePain(title, text, theme);
+      const formula = hookById($('#draftHook')?.value || currentHookId());
+      const opening = hookLine(formula, title || mainTitle, theme, pain);
+      if (isCareerTheme(theme, pain + text + title)) {{
+        const action = pain.includes('信任')
+          ? '先别急着证明自己多厉害，先连续输出三个能解决具体问题的内容：一个讲误区，一个讲方法，一个讲案例。'
+          : pain.includes('定位') || pain.includes('人设')
+            ? '先用一句话说清楚：你帮谁、解决什么问题、凭什么是你。说不清这句话，发再多作品也很难留下记忆点。'
+            : pain.includes('变现') || pain.includes('成交') || pain.includes('获客')
+              ? '先把内容分成三类：拉新内容解决曝光，信任内容解决相信，转化内容解决行动。不要每条视频都只求播放。'
+              : '把你的能力拆成用户能看懂的内容资产：选题讲问题，文案讲方法，案例讲结果，主页讲你是谁。';
+        const bridge = scores.structure < 70
+          ? '这条内容要按“问题-误区-方法-动作”的结构讲，不要只讲概念。'
+          : '这条内容的核心不是喊口号，而是让用户看完以后知道下一步该做什么。';
+        return [
+          opening,
+          '',
+          `标题建议：${{mainTitle}}`,
+          '',
+          `很多人想做${{theme.split('/')[0] || '个人品牌'}}，第一反应就是：我要多发作品、我要追热点、我要把账号做起来。`,
+          '',
+          `但真正卡住你的，往往不是不会发，而是${{pain}}。用户不是因为你说得多才信你，而是因为他能在你的内容里看见三个东西：你理解他的问题，你有解决问题的方法，你能持续给他确定感。`,
+          '',
+          bridge,
+          '',
+          `所以这条视频我建议你这样讲：第一，先点出用户最焦虑的场景，比如“我想做账号，但不知道别人为什么要关注我”。第二，告诉他一个误区：不是先把自己包装得很厉害，而是先让用户知道你能帮他解决什么。第三，给出一个今天就能做的动作：${{action}}`,
+          '',
+          '真正的 AI 超级个体，不是工具用得多，而是能把自己的经验、方法和判断，变成别人愿意持续关注的内容资产。',
+          '',
+          '如果你也想把自己的能力做成一个可持续的个人品牌，评论区留一句“我要做资产”，我下一条继续拆具体步骤。'
+        ].join('\\n');
+      }}
+      const action = theme.includes('追星')
+        ? '别只问自己为什么喜欢他，也问问自己：他身上哪一种生命力，是我也想长出来的。'
+        : theme.includes('边界') || theme.includes('讨好')
+          ? '下一次你想立刻答应别人之前，先停三秒，问自己一句：我是真的愿意，还是害怕别人不高兴。'
+          : theme.includes('情绪')
+            ? '情绪上来的时候，先不要急着证明谁对谁错，先把注意力拉回身体，给自己十分钟不做决定。'
+            : theme.includes('行动')
+              ? '不要等状态完全好了再开始，先做一件小到不会失败的事，让自己重新拿回主动权。'
+              : '每天给自己留一段不解释、不迎合、不表演的时间，慢慢把注意力收回来。';
+      const bridge = scores.structure < 70
+        ? '这条视频我会把它讲得更清楚：先说痛点，再说误区，最后给你一个今天就能做的小动作。'
+        : '这条视频不用讲太满，只要把最刺痛的地方讲准，再给一个能落地的动作。';
+      const ending = theme.includes('追星')
+        ? '如果你也在某个人身上看见过理想中的自己，评论区打一个“我也想发光”。'
+        : '如果你也想从今天开始把自己放回第一位，评论区留一句“我先站回自己”。';
+      return [
+        opening,
+        '',
+        `标题建议：${{mainTitle}}`,
+        '',
+        `你有没有发现，${{pain}}的时候，最累的不是那件事本身，而是你一边委屈，一边还要说服自己“算了，没关系”。`,
+        '',
+        '但我想告诉你，真正消耗你的，往往不是别人一句话、一个态度、一次忽视，而是你已经不舒服了，却还在替对方找理由。你明明感觉到了不对劲，却第一反应不是保护自己，而是怀疑自己是不是太敏感、太小题大做、太不懂事。',
+        '',
+        bridge,
+        '',
+        `第一，你要先承认自己的感受。感受出现，不代表你脆弱，它只是提醒你：这里可能有一个边界被碰到了。第二，不要急着把自己改造成更好说话的人。很多时候，你缺的不是懂事，而是允许自己不舒服。第三，${{action}}`,
+        '',
+        '真正的清醒，不是把自己变得很冷，也不是跟所有人对抗，而是你终于知道：关系可以重要，别人也可以重要，但你不能一直消失。',
+        '',
+        ending
+      ].join('\\n');
+    }}
+
+    function renderKpis() {{
+      const videos = state.videos;
+      const avg = Math.round(videos.reduce((n,v)=>n+v.scores.score,0)/videos.length);
+      const themes = {{}};
+      videos.forEach(v => themes[v.theme] = (themes[v.theme]||0)+1);
+      const best = Object.entries(themes).sort((a,b)=>b[1]-a[1])[0]?.[0] || '-';
+      $('#kpiTotal').textContent = videos.length;
+      $('#kpiAvg').textContent = avg;
+      $('#kpiBest').textContent = best.replace('/','/');
+      $('#kpiNeed').textContent = videos.filter(v => v.scores.score < 68).length;
+      $('#todayActions').innerHTML = [
+        '先优化低于 68 分的视频标题和封面，尤其是只有情绪没有具体动作的作品。',
+        '把王一博相关作品整理成“追星心理”系列，连续做 5 条形成记忆点。',
+        '每条新视频发布前先来这里生成 4 个标题和 4 个封面方案。',
+        '每周固定产出 2 条方法论内容，提升收藏和复看。'
+      ].map((x,i)=>`<div class="result"><b>${{i+1}}.</b> ${{esc(x)}}</div>`).join('') + renderDanaoReference('发布规划', 3);
+    }}
+
+    function renderVideoList() {{
+      const search = $('#searchVideo').value.trim();
+      const theme = $('#themeFilter').value;
+      let videos = [...state.videos];
+      if ($('#sortScore').dataset.sort === 'on') videos.sort((a,b)=>b.scores.score-a.scores.score);
+      if (state.onlyNeeds) videos = videos.filter(v => v.scores.score < 68);
+      videos = videos.filter(v => (!theme || v.theme === theme) && (!search || `${{v.title}} ${{v.theme}} ${{v.tags.join(' ')}} ${{v.transcript || ''}}`.includes(search)));
+      $('#filterNeeds').classList.toggle('active-filter', !!state.onlyNeeds);
+      $('#videoList').innerHTML = videos.map(v => `
+        <article class="panel video ${{themeClass(v.theme)}} ${{v.scores.score<60?'low':v.scores.score<70?'warn':''}}">
+          <div class="row"><div><div class="muted">#${{v.idx}} · <span class="chip theme-chip">${{esc(v.theme)}}</span> · ${{esc(v.date || '日期缺失')}}</div><h3>${{esc(v.title)}}</h3></div><div class="score">${{v.scores.score}}</div></div>
+          <div class="chips"><span class="chip">钩子 ${{v.scores.hook}}</span><span class="chip">结构 ${{v.scores.structure}}</span><span class="chip">情绪 ${{v.scores.emotion}}</span><span class="chip">封面 ${{v.scores.cover}}</span></div>
+          <div class="stats-grid">
+            <div class="stat-pill"><b>${{fmt(v.stats?.play)}}</b><span>播放量</span></div>
+            <div class="stat-pill"><b>${{fmt(v.stats?.likes)}}</b><span>点赞</span></div>
+            <div class="stat-pill"><b>${{fmt(v.stats?.comments)}}</b><span>评论</span></div>
+            <div class="stat-pill"><b>${{fmt(v.stats?.collects)}}</b><span>收藏</span></div>
+            <div class="stat-pill"><b>${{fmt(v.stats?.shares)}}</b><span>分享</span></div>
+          </div>
+          <div class="cover">${{esc(v.cover.join(' / '))}}</div>
+          <div class="review-sections">
+            <div class="review-tip"><b>钩子优化：</b>${{esc(v.optimizationTips?.hook || '前 3 秒先点名痛点和代价。')}}</div>
+            <div class="review-tip"><b>结构优化：</b>${{esc(v.optimizationTips?.structure || '按痛点、误区、真相、动作推进。')}}</div>
+            <div class="review-tip"><b>情绪优化：</b>${{esc(v.optimizationTips?.emotion || '补具体场景和用户真实感受。')}}</div>
+            <div class="review-tip"><b>封面优化：</b>${{esc(v.optimizationTips?.cover || '三行大字突出冲突和栏目标签。')}}</div>
+          </div>
+          ${{renderDanaoReference('发布复盘', 2)}}
+          <details class="transcript-box" open>
+            <summary>文字稿 · ${{esc(v.transcriptSource || '本地内容')}}</summary>
+            <div class="transcript-content">${{esc(v.transcript || v.scores.status_note || '暂无文字稿')}}</div>
+          </details>
+          <div class="actions"><button class="secondary" onclick="loadVideoToOptimizer(${{v.idx}})">拿这条做改写</button><button class="secondary" onclick="makeSiblingIdeas(${{v.idx}})">生成同类选题</button></div>
+        </article>`).join('');
+    }}
+
+    function showNeedVideos() {{
+      state.onlyNeeds = true;
+      $('#searchVideo').value = '';
+      $('#themeFilter').value = '';
+      $('#sortScore').dataset.sort = 'on';
+      switchView('library');
+      renderVideoList();
+    }}
+
+    function renderSelectors() {{
+      const themes = [...new Set([...state.pillars, ...state.videos.map(v=>v.theme)])];
+      $('#themeFilter').innerHTML = '<option value="">全部主题</option>' + themes.map(t=>`<option>${{esc(t)}}</option>`).join('');
+      $('#draftTheme').innerHTML = '<option value="">自动判断主题</option>' + themes.map(t=>`<option>${{esc(t)}}</option>`).join('');
+      $('#ideaTheme').innerHTML = '<option value="">不套用预设，使用手动输入</option>' + themes.map(t=>`<option>${{esc(t)}}</option>`).join('');
+      $('#ideaPain').innerHTML = '<option value="">不套用预设，使用手动输入</option>' + state.painPoints.map(p=>`<option>${{esc(p)}}</option>`).join('');
+      const hookOptions = hookFormulas.map(f=>`<option value="${{esc(f.id)}}">${{esc(f.name)}}｜${{esc(f.use)}}</option>`).join('');
+      ['draftHook','ideaHook'].forEach(sel => {{
+        const el = $('#' + sel);
+        if (el) el.innerHTML = hookOptions;
+      }});
+      syncHookSelects(currentHookId());
+      renderViralArchiveList();
+    }}
+
+    function selectedIdeaTheme() {{
+      return ($('#ideaThemeCustom')?.value || '').trim() || $('#ideaTheme').value || 'AI超级个体/个人品牌';
+    }}
+
+    function selectedIdeaPain() {{
+      return ($('#ideaPainCustom')?.value || '').trim() || $('#ideaPain').value || '想做账号但不知道怎么建立信任';
+    }}
+
+    function analyzeDraft() {{
+      const title = $('#draftTitle').value.trim();
+      const text = $('#draftText').value.trim();
+      const theme = $('#draftTheme').value || themeOf(title, text);
+      const formula = hookById($('#draftHook').value);
+      syncHookSelects(formula.id);
+      const scores = scoreDraft(title, text);
+      const titles = titleVariants(title, theme);
+      const covers = coverLines(title, theme);
+      const advice = scriptAdvice(title, text, theme);
+      const newScript = optimizedScript(title, text, theme, scores);
+      state.optimizedDraft = {{ title: titles[1] || titles[0] || title, script: newScript, theme }};
+      $('#draftResult').innerHTML = `
+        <div class="result"><b>主题判断：</b>${{esc(theme)}}　<b>潜力分：</b>${{scores.total}}（钩子 ${{scores.hook}} / 结构 ${{scores.structure}} / 情绪 ${{scores.emotion}} / 封面 ${{scores.cover}}）</div>
+        <div class="result"><b>已套用钩子公式：</b>${{esc(formula.name)}}<br><span class="muted">${{esc(formula.pattern)}} · 下次生成选题会自动沿用。</span></div>
+        <div class="result"><b>标题备选：</b><br>${{titles.map((t,i)=>`${{i+1}}. ${{esc(t)}}`).join('<br>')}}</div>
+        <div class="result"><b>封面三行字：</b><br>${{covers.map((c,i)=>`${{i+1}}. ${{esc(c.join(' / '))}}`).join('<br>')}}</div>
+        <div id="coverExamples" class="result-list"></div>
+        <div class="result"><b>文案调整：</b><br>${{advice.map((a,i)=>`${{i+1}}. ${{esc(a)}}`).join('<br>')}}</div>
+        ${{renderDanaoReference('标题封面文案优化', 3)}}
+        <div class="result"><b>新版文字稿：</b><div class="copybox">${{esc(newScript)}}</div></div>
+        <div class="actions">
+          <button class="primary" onclick="copyOptimizedDraft()">复制新版文字稿</button>
+          <button class="secondary" onclick="replaceWithOptimizedDraft()">替换左侧文字稿</button>
+        </div>
+        <div class="result"><b>发布建议：</b>标题里保留一个强冲突词，封面不超过 14 个大字，正文结尾加一个让用户代入自己的问题。</div>`;
+      loadCoverExamples(theme);
+    }}
+
+    function plainRewriteDraft() {{
+      const title = $('#draftTitle').value.trim();
+      const text = $('#draftText').value.trim();
+      const theme = $('#draftTheme').value || themeOf(title, text);
+      syncHookSelects($('#draftHook').value);
+      const rewritten = plainRewriteText(title, text, theme);
+      state.plainDraft = {{ title: title || '大白话改写稿', script: rewritten, theme }};
+      $('#draftResult').innerHTML = `
+        <div class="result"><b>大白话改写：</b><span class="muted">保留原观点，去掉绕弯和书面感，更像真人口播。</span></div>
+        ${{renderDanaoReference('标题封面文案优化', 3)}}
+        <div class="result"><b>新版文字稿：</b><div class="copybox">${{esc(rewritten)}}</div></div>
+        <div class="actions">
+          <button class="primary" onclick="copyPlainDraft()">复制大白话文字稿</button>
+          <button class="secondary" onclick="replaceWithPlainDraft()">替换左侧文字稿</button>
+        </div>`;
+    }}
+
+    window.copyPlainDraft = async function() {{
+      await navigator.clipboard.writeText(state.plainDraft?.script || '');
+    }}
+
+    window.replaceWithPlainDraft = function() {{
+      if (!state.plainDraft) return;
+      $('#draftTitle').value = state.plainDraft.title;
+      $('#draftText').value = state.plainDraft.script;
+      $('#draftTheme').value = state.plainDraft.theme;
+      analyzeDraft();
+    }}
+
+    function renderViralAnalysis(data) {{
+      if (!data || data.ok === false) {{
+        state.lastViralAnalysis = null;
+        $('#viralResult').innerHTML = `
+          <div class="result"><b>链接内容提取失败，未生成拆解。</b><br><span class="muted">${{esc(data?.message || '没有从该链接拿到真实标题、文案、封面或数据。')}}</span></div>
+          <div class="result"><b>下一步：</b>请确认粘贴的是单条公开视频分享链接；系统不会要求先抓取博主主页，拿不到真实标题、文案、封面或数据时才会停止生成。</div>`;
+        return;
+      }}
+      const title = data.title || '待拆解短视频链接';
+      const text = data.fullText || data.transcriptPreview || title;
+      const theme = '当前链接拆解';
+      const pain = linkTopic(title, text);
+      const scores = data.scores || viralScores(title, text);
+      const avg = Math.round((scores.hook + scores.conflict + scores.structure + scores.action + scores.cover) / 5);
+      const reusableHook = safeClip(splitSentences(text, 1)[0] || title || pain, 42);
+      const metric = (name, value) => `<div class="metric-row"><span class="muted">${{esc(name)}} ${{value}}</span><div class="meter"><span style="width:${{value}}%"></span></div></div>`;
+      const techniques = [
+        `开头停留点来自当前链接原文：${{legacySafe(reusableHook)}}`,
+        `核心主题只按当前链接判断：${{legacySafe(pain)}}。`,
+        '中段拆解只保留原视频的信息推进，不套用历史账号的情感、心理或女性成长模板。',
+        '每 5 到 8 秒给一个新信息点：现象、原因、例子、动作。',
+        '结尾互动要围绕当前链接主题提问，不使用旧栏目口号。'
+      ];
+      const template = [
+        `开头：${{legacySafe(reusableHook)}}`,
+        `场景：围绕「${{legacySafe(pain)}}」补一个新的具体画面。`,
+        '推进：解释为什么这件事重要，换一个新例子，不复述原句。',
+        '方法：给用户一个能马上执行的动作。',
+        `互动：围绕「${{legacySafe(pain)}}」问一个可回答的问题。`
+      ].join('\\n');
+      const viralRecord = {{
+        id: `viral-${{Date.now()}}`,
+        title,
+        theme,
+        pain,
+        avg,
+        url: data.resolvedUrl || data.url || $('#viralUrl')?.value.trim() || '',
+        source: data.source || '链接分析',
+        scores,
+        stats: data.stats || null,
+        duration: data.duration || data.durationSec || data.videoDuration || data.video_duration || '',
+        transcriptPreview: data.transcriptPreview || '',
+        fullText: data.fullText || data.transcriptPreview || '',
+        transcriptSource: data.transcriptSource || '页面文案',
+        videoTranscriptStatus: data.videoTranscriptStatus || '',
+        videoTranscriptError: data.videoTranscriptError || '',
+        cover: data.cover || ['痛点大字','真人口播','反常识标签'],
+        coverImage: data.coverImage || data.coverUrl || '',
+        coverSource: data.coverSource || data.coverUrl || '',
+        elements: [...(data.elements || []), ...techniques].slice(0,7),
+        template,
+        createdAt: new Date().toLocaleString()
+      }};
+      viralRecord.coverAdvice = viralCoverAdvice(viralRecord);
+      viralRecord.deepDive = viralDeepSections(viralRecord);
+      viralRecord.recreation = makeViralRecreation(viralRecord);
+      state.lastViralAnalysis = viralRecord;
+      $('#viralResult').innerHTML = `
+        <div class="result"><b>分析来源：</b>${{esc(data.source || '链接分析')}}<br><span class="muted">${{esc(data.resolvedUrl || data.url || '')}}</span></div>
+        <div class="result"><b>爆款潜力：</b>${{avg}}　<span class="muted">${{esc(theme)}} · ${{esc(pain)}}</span><br><b>识别标题：</b>${{esc(title)}}</div>
+        ${{data.stats ? `<div class="result"><b>链接数据：</b>播放 ${{fmt(data.stats.play)}} · 点赞 ${{fmt(data.stats.likes)}} · 评论 ${{fmt(data.stats.comments)}} · 收藏 ${{fmt(data.stats.collects)}} · 分享 ${{fmt(data.stats.shares)}}</div>` : ''}}
+        <div class="result"><b>提取文案功能：</b><span class="muted"> ${{esc(viralRecord.transcriptSource)}}${{viralRecord.videoTranscriptStatus === 'failed' ? ` · 视频下载转写失败：${{esc(viralRecord.videoTranscriptError)}}` : ''}}</span>${{renderQingdouExtract(viralRecord)}}</div>
+        <div class="result">${{metric('开场钩子', scores.hook)}}${{metric('冲突反差', scores.conflict)}}${{metric('结构递进', scores.structure)}}${{metric('行动价值', scores.action)}}${{metric('封面传播', scores.cover)}}</div>
+        <div class="result"><b>爆款元素：</b><br>${{[...(data.elements || []), ...techniques].slice(0,7).map((x,i)=>`${{i+1}}. ${{esc(x)}}`).join('<br>')}}</div>
+        ${{renderDanaoReference('爆款短视频拆解', 3)}}
+        <div class="result"><b>深度拆解：</b>${{renderViralDeepDive(viralRecord)}}</div>
+        <div class="result"><b>封面图与拆解建议：</b>${{renderCoverCompare(viralRecord)}}</div>
+        <div class="result"><b>提取文案并二创：</b>${{renderViralRecreation(viralRecord)}}</div>
+        <div class="result"><b>可复用创作模板：</b><div class="copybox">${{esc(template)}}</div></div>
+        <div class="actions">
+          <button class="primary" onclick="archiveCurrentViral()">归档拆解结果</button>
+          <button class="secondary" onclick="archiveAndUseViral()">归档并用于选题生成</button>
+        </div>`;
+    }}
+
+    window.archiveCurrentViral = function() {{
+      if (!state.lastViralAnalysis) return;
+      const items = viralArchives().filter(x=>x.id !== state.lastViralAnalysis.id && x.title !== state.lastViralAnalysis.title);
+      items.unshift(state.lastViralAnalysis);
+      saveViralArchives(items);
+      renderViralArchiveList();
+      $('#viralResult').insertAdjacentHTML('afterbegin', '<div class="result"><b>已归档：</b>这个爆款拆解现在可以在选题生成器里选择套用。</div>');
+    }}
+
+    window.archiveAndUseViral = function() {{
+      archiveCurrentViral();
+      if (!state.lastViralAnalysis) return;
+      useArchivedCaseInIdeas(state.lastViralAnalysis.id);
+    }}
+
+    async function analyzeViral() {{
+      const url = $('#viralUrl').value.trim();
+      if (!url) {{
+        $('#viralResult').innerHTML = '<div class="result"><b>请先粘贴短视频链接。</b><br><span class="muted">支持 v.douyin.com 短链接和 douyin.com/video 长链接。</span></div>';
+        return;
+      }}
+      $('#viralResult').innerHTML = '<div class="result"><b>正在提取链接内容...</b><br><span class="muted">系统会先提取真实标题、封面和数据；拿到播放地址后会临时下载视频做逐字转写，转写完成后自动删除原视频。</span></div>';
+      try {{
+        const res = await fetch(apiUrl('/api/viral-analyze'), apiOptions({{
+          method:'POST',
+          cache:'no-store',
+          headers: {{ 'Content-Type':'application/json', ...(accessKey ? {{ 'X-Workflow-Key': accessKey }} : {{}}) }},
+          body: JSON.stringify({{ url }})
+        }}));
+        if (!res.ok) throw new Error('链接分析接口不可用');
+        renderViralAnalysis(await res.json());
+      }} catch (err) {{
+        renderViralAnalysis({{ ok:false, message:`链接分析接口不可用：${{err.message || err}}。未提取到真实内容，所以没有生成拆解。` }});
+      }}
+    }}
+
+    window.copyOptimizedDraft = async function() {{
+      await navigator.clipboard.writeText(state.optimizedDraft?.script || '');
+    }}
+
+    window.replaceWithOptimizedDraft = function() {{
+      if (!state.optimizedDraft) return;
+      $('#draftTitle').value = state.optimizedDraft.title;
+      $('#draftText').value = state.optimizedDraft.script;
+      $('#draftTheme').value = state.optimizedDraft.theme;
+      analyzeDraft();
+    }}
+
+    function loadVideoToOptimizer(idx) {{
+      const v = state.videos.find(x=>x.idx===idx);
+      $('#draftTitle').value = v.title;
+      $('#draftText').value = v.transcript;
+      $('#draftTheme').value = v.theme;
+      switchView('optimizer');
+      analyzeDraft();
+    }}
+    window.loadVideoToOptimizer = loadVideoToOptimizer;
+
+    const topicTemplates = [
+      '为什么{{pain}}的人，最容易把自己活丢',
+      '{{pain}}不是你的错，但继续这样就是消耗',
+      '真正清醒的人，会先戒掉{{pain}}',
+      '你以为你在{{pain}}，其实你是在保护害怕',
+      '如果你正在{{pain}}，请先做这 3 件事',
+      '别再美化{{pain}}，那不是善良',
+      '{{theme}}里最该听懂的一句话',
+      '一个人开始变好的标志：不再{{pain}}',
+      '你不是太敏感，你只是太久没有站回自己',
+      '把自己活回来，从停止{{pain}}开始',
+      '别等别人允许你，你本来就可以',
+      '这不是鸡汤，这是你该拿回的人生主动权'
+    ];
+
+    const careerTopicTemplates = [
+      '为什么{{pain}}，才是{{theme}}做不起来的真正原因',
+      '普通人做{{theme}}，先别急着发作品',
+      '{{theme}}最该先建立的不是流量，而是信任',
+      '想靠{{theme}}变现，先把这 3 件事说清楚',
+      '{{pain}}的人，最需要先做一套内容资产',
+      '别再乱发作品了，{{theme}}要先搭内容定位',
+      '用户为什么不信你？因为你少了这条内容',
+      '从今天开始，把你的能力做成可被看见的资产',
+      '{{theme}}不是发朋友圈，而是持续交付确定感',
+      '一个人做账号，怎样让陌生人快速相信你',
+      'AI 不是替你变强，是放大你已经清楚的能力',
+      '把经验变成内容，把内容变成信任，把信任变成成交'
+    ];
+
+    function cleanTopic(topic) {{
+      return String(topic || '').replace(/^\\d+[.、]\\s*/, '').replace(/｜.*/, '').trim();
+    }}
+
+    function topicPackage(topic, theme, pain) {{
+      const clean = cleanTopic(topic);
+      const themeName = theme.split('/')[0] || theme;
+      const painCore = pain.replace('的人', '').replace('导致', '').replace('却', '，却');
+      const formula = hookById($('#ideaHook')?.value || currentHookId());
+      const viralCase = currentViralArchive();
+      const opening = hookLine(formula, clean, theme, pain);
+      const careerMode = isCareerTheme(theme, pain);
+      const titles = careerMode
+        ? [
+            clean,
+            `${{themeName}}做不起来，不是你不努力，是信任资产没搭好`,
+            `普通人做${{themeName}}，先把这 3 个问题讲清楚`,
+            `别再乱发作品了，先让用户知道为什么该信你`
+          ]
+        : [
+            clean,
+            `${{painCore}}，真正该改的不是你`,
+            `${{themeName}}：你不是不够好，是太久没站回自己`,
+            `别再用${{painCore}}证明你值得被爱`
+          ];
+      if (viralCase) {{
+        titles.splice(1, 0, `${{clean}}｜照着爆款结构讲透`);
+      }}
+      const cover = viralCase?.cover?.length
+        ? viralCase.cover
+        : careerMode
+        ? ['先别急着发作品', '先建立信任资产', themeName]
+        : theme.includes('追星')
+        ? ['你追的不是他', '是你想成为的自己', '追星心理']
+        : theme.includes('边界') || theme.includes('讨好')
+          ? ['别再讨好', '你越懂事越被亏待', '边界感']
+          : theme.includes('情绪')
+            ? ['你不是太敏感', '是边界太久没被看见', '内核稳定']
+            : ['把自己活回来', '从停止内耗开始', themeName];
+      const script = careerMode
+        ? [
+            viralCase ? `先照着这条爆款的结构开场：${{viralCase.elements?.[0] || viralCase.title}}` : opening,
+            `你有没有发现，很多人想做${{themeName}}，一上来就问：我该发什么、怎么涨粉、怎么变现。`,
+            `但真正的问题往往不是你没有选题，而是${{pain}}。用户不认识你，也不知道你能帮他解决什么，所以他看完就划走。`,
+            viralCase ? `这条内容可以借用它的爆点：${{(viralCase.elements || []).slice(0,3).join('；')}}。不要照搬原话，要照搬它的“先点问题、再翻误区、最后给动作”的节奏。` : '',
+            `做${{themeName}}，最先搭的不是流量，而是信任。信任来自三件事：你能准确说出用户的问题，你能给出清晰的方法，你能持续证明自己不是随便说说。`,
+            `所以这条视频可以给用户三个动作。第一，用一句话写清楚你帮谁解决什么问题。第二，连续发三条内容：一条讲误区，一条讲方法，一条讲案例。第三，把主页置顶改成“我是谁、我帮谁、怎么帮”。`,
+            `AI 不是替你凭空变强，而是把你已经有的经验、判断和方法放大。你越清楚自己的定位，AI 越能帮你把内容规模化。`,
+            `如果你也想把自己的能力做成一个可持续的个人品牌，评论区留一句“我要做资产”，我下一条继续拆具体步骤。`
+          ].filter(Boolean).join('\\n\\n')
+        : [
+            viralCase ? `先照着这条爆款的结构开场：${{viralCase.elements?.[0] || viralCase.title}}` : opening,
+            `你有没有发现，${{pain}}的时候，最累的不是事情本身，而是你明明很委屈，还要假装自己没关系。`,
+            `很多人会以为，这是自己太敏感、太矫情、太不懂事。但真正的问题不是你感受太多，而是你太习惯把别人的反应放在自己前面。`,
+            viralCase ? `这条内容可以借用它的爆点：${{(viralCase.elements || []).slice(0,3).join('；')}}。不要照搬原话，要照搬它的“先扎痛点、再翻误区、最后给动作”的节奏。` : '',
+            `你越想证明自己值得被喜欢，就越容易把选择权交出去。你越怕别人失望，就越容易对自己的失望视而不见。`,
+            `所以这条视频想提醒你：从今天开始，先不要急着变得更好说话。先练习三件事。第一，感受不舒服的时候，别立刻解释自己。第二，别人越界的时候，用一句简单的话挡回去。第三，把“他会不会不高兴”，换成“我这样会不会委屈自己”。`,
+            `真正的清醒，不是变得冷漠，而是终于知道，关系可以重要，但你不能一直消失。你最该经营的，不是别人眼里的好人设，而是你自己心里的稳定感。`,
+            `如果你也正在经历${{pain}}，评论区留一句“我先站回自己”。`
+          ].filter(Boolean).join('\\n\\n');
+      return {{ title: clean, titles: titles.slice(0,4), cover, script, theme, pain, formula, viralCase }};
+    }}
+
+    function renderIdeaPackage(index) {{
+      const item = state.currentIdeas?.[index];
+      if (!item) return;
+      $$('.idea-card').forEach((card, i)=>card.classList.toggle('active', i === index));
+      const pack = topicPackage(item.topic, item.theme, item.pain);
+      const copyText = [
+        '【选题】' + pack.title,
+        '',
+        '【标题】',
+        ...pack.titles.map((t,i)=>`${{i+1}}. ${{t}}`),
+        '',
+        '【封面三行字】',
+        pack.cover.join(' / '),
+        '',
+        '【文字稿】',
+        pack.script
+      ].join('\\n');
+      $('#ideaPackage').dataset.copy = copyText;
+      $('#ideaPackage').innerHTML = `
+        <div class="result">
+          <div class="script-title">${{esc(pack.title)}}</div>
+          <span class="chip theme-chip">${{esc(pack.theme)}}</span>
+          <span class="chip">${{esc(pack.pain)}}</span>
+        </div>
+        <div class="result"><b>自动套用钩子：</b>${{esc(pack.formula.name)}}<br><span class="muted">${{esc(pack.formula.pattern)}}</span></div>
+        ${{pack.viralCase ? `<div class="result"><b>套用爆款案例：</b>${{esc(pack.viralCase.title)}}<br><span class="muted">${{esc(pack.viralCase.source)}} · 爆款潜力 ${{pack.viralCase.avg}}</span></div>` : ''}}
+        ${{renderDanaoReference('选题生成器', 3)}}
+        <div class="result"><b>标题方案：</b><br>${{pack.titles.map((t,i)=>`${{i+1}}. ${{esc(t)}}`).join('<br>')}}</div>
+        <div class="cover">${{esc(pack.cover.join(' / '))}}</div>
+        <div class="result"><b>文字稿：</b><div class="copybox">${{esc(pack.script)}}</div></div>
+        <div class="actions">
+          <button class="primary" onclick="copyIdeaPackage()">复制整套素材</button>
+          <button class="secondary" onclick="sendIdeaToOptimizer()">拿去继续优化</button>
+        </div>`;
+    }}
+    window.renderIdeaPackage = renderIdeaPackage;
+
+    window.copyIdeaPackage = async function() {{
+      await navigator.clipboard.writeText($('#ideaPackage').dataset.copy || '');
+    }}
+
+    window.sendIdeaToOptimizer = function() {{
+      const text = $('#ideaPackage').dataset.copy || '';
+      const title = text.match(/【选题】(.+)/)?.[1] || '';
+      const script = text.split('【文字稿】')[1]?.trim() || '';
+      $('#draftTitle').value = title;
+      $('#draftText').value = script;
+      const theme = selectedIdeaTheme();
+      if ([...$('#draftTheme').options].some(option => option.value === theme || option.textContent === theme)) {{
+        $('#draftTheme').value = theme;
+      }} else {{
+        $('#draftTheme').value = '';
+      }}
+      switchView('optimizer');
+      analyzeDraft();
+    }}
+
+    function generateIdeas() {{
+      const theme = selectedIdeaTheme();
+      const pain = selectedIdeaPain();
+      const count = Number($('#ideaCount').value);
+      syncHookSelects($('#ideaHook').value);
+      const viralCase = currentViralArchive();
+      const careerMode = isCareerTheme(theme, pain);
+      const templates = careerMode ? careerTopicTemplates : topicTemplates;
+      const rows = [];
+      for (let i=0;i<count;i++) {{
+        const base = templates[i % templates.length].replaceAll('{{pain}}', pain).replaceAll('{{theme}}', theme.split('/')[0]);
+        const suffixPool = viralCase
+          ? ['｜爆款同构','｜外部案例复刻','｜高互动结构','｜封面反差','｜评论区入口']
+          : careerMode
+            ? ['｜个人品牌','｜信任资产','｜内容定位','｜AI超级个体','｜成交路径']
+            : ['｜清醒局','｜女性成长','｜关系边界','｜内核稳定','｜行动力'];
+        const suffix = suffixPool[i % suffixPool.length];
+        rows.push({{ topic:`${{i+1}}. ${{base}}${{suffix}}`, theme, pain }});
+      }}
+      state.currentIdeas = rows;
+      $('#ideasResult').innerHTML = rows.map((x,i)=>`
+        <div class="result idea-card">
+          <div><strong>${{esc(x.topic)}}</strong><div class="idea-meta"><span class="chip theme-chip">${{esc(x.theme.split('/')[0])}}</span><span class="chip">${{esc(x.pain.slice(0,12))}}</span></div></div>
+          <button class="secondary" onclick="renderIdeaPackage(${{i}})">确定并生成</button>
+        </div>`).join('');
+      $('#ideasResult').dataset.copy = rows.map(x=>x.topic).join('\\n');
+      renderIdeaPackage(0);
+    }}
+    window.makeSiblingIdeas = function(idx) {{
+      const v = state.videos.find(x=>x.idx===idx);
+      $('#ideaTheme').value = v.theme;
+      $('#ideaThemeCustom').value = '';
+      $('#ideaPainCustom').value = '';
+      switchView('ideas');
+      generateIdeas();
+    }}
+
+    function countBy(list, fn) {{
+      return list.reduce((acc, item)=>{{ const key = fn(item) || '未分类'; acc[key] = (acc[key] || 0) + 1; return acc; }}, {{}});
+    }}
+
+    function topEntries(obj, limit=3) {{
+      return Object.entries(obj).sort((a,b)=>b[1]-a[1]).slice(0,limit);
+    }}
+
+    function weakDimension(videos) {{
+      const dims = ['hook','structure','emotion','cover'];
+      const avg = Object.fromEntries(dims.map(k=>[k, Math.round(videos.reduce((n,v)=>n+(v.scores?.[k]||0),0)/Math.max(1,videos.length))]));
+      const label = {{ hook:'开场钩子', structure:'内容结构', emotion:'情绪共鸣', cover:'封面点击' }};
+      const key = dims.sort((a,b)=>avg[a]-avg[b])[0];
+      return {{ key, label:label[key], avg:avg[key], all:avg }};
+    }}
+
+    function titleSeed(theme, pain, mode, best) {{
+      const t = (theme || '综合清醒文案').split('/')[0];
+      const bestTitle = best?.title || '';
+      const pools = {{
+        pain: [`你以为你缺的是方法，其实是${{pain}}`, `越想改变，越容易卡在${{pain}}`, `别再用努力掩盖${{pain}}`],
+        trust: [`${{t}}真正有效的 3 个动作`, `我把${{t}}拆成了普通人能做的步骤`, `别只听金句，${{t}}要这样落地`],
+        story: [`一个真实场景，讲透${{pain}}`, `为什么你明明懂了，还是做不到`, `从${{bestTitle.slice(0,12) || t}}延伸出的一条新内容`],
+        series: [`${{t}}系列第 1 条：先改掉这个误区`, `围绕${{pain}}，连续做 3 条更容易涨粉`, `把爆款主题做成栏目，而不是单条`],
+      }};
+      const list = pools[mode] || pools.pain;
+      return list[Math.floor(Math.random()*list.length)];
+    }}
+
+    function renderPlanner() {{
+      const videos = [...state.videos];
+      if (!videos.length) {{
+        $('#plannerSummary').innerHTML = '<div class="result">暂无作品数据。先到“抖音数据抓取”同步你的账号作品。</div>';
+        $('#calendar').innerHTML = '';
+        $('#trustActions').innerHTML = '';
+        return;
+      }}
+      const themes = topEntries(countBy(videos, v=>v.theme), 4);
+      const avg = Math.round(videos.reduce((n,v)=>n+(v.scores?.score||0),0)/videos.length);
+      const best = [...videos].sort((a,b)=>(b.scores?.score||0)-(a.scores?.score||0))[0];
+      const weak = weakDimension(videos);
+      const low = videos.filter(v=>(v.scores?.score||0)<68).length;
+      const primaryTheme = themes[0]?.[0] || state.pillars[0];
+      const secondaryTheme = themes[1]?.[0] || state.pillars[1] || primaryTheme;
+      const painPool = state.painPoints || [];
+      const primaryPain = painPool.find(p=>primaryTheme.includes('追星') ? p.includes('追星') : p) || painPool[0] || '用户当下最强痛点';
+
+      $('#plannerSummary').innerHTML = [
+        `<div class="result"><b>账号主线：</b>${{esc(primaryTheme)}}<br><span class="muted">当前作品最多的方向是「${{esc(themes.map(x=>`${{x[0]}} ${{x[1]}}条`).join(' / '))}}」。未来 7 天要围绕主线做连续记忆点。</span></div>`,
+        `<div class="result"><b>优先补短板：</b>${{esc(weak.label)}} ${{weak.avg}}分<br><span class="muted">本周每条内容都要补这个短板：钩子不够就先说结果，结构弱就固定“痛点-误区-真相-动作”。</span></div>`,
+        `<div class="result"><b>涨粉机会：</b>平均潜力 ${{avg}}分，待优化 ${{low}}条<br><span class="muted">最强样本「${{esc(best.title.slice(0,28))}}」适合拆成连续栏目，承接关注理由。</span></div>`
+      ].join('') + renderDanaoReference('发布规划', 3);
+
+      const plan = [
+        {{ day:'周一', type:'强痛点拉新', theme:primaryTheme, mode:'pain', goal:'拉新：用一句扎心判断让陌生人停住。', action:'开头 3 秒直接点名用户处境，不讲背景；结尾问“你中了哪一条？”' }},
+        {{ day:'周二', type:'方法论建立信任', theme:primaryTheme, mode:'trust', goal:'信任：把观点拆成 3 个可执行动作。', action:'中段必须出现“第一步/第二步/第三步”，让用户感觉你不是只会讲情绪。' }},
+        {{ day:'周三', type:'真实场景共鸣', theme:secondaryTheme, mode:'story', goal:'共鸣：用一个生活场景证明你懂她。', action:'开头先讲场景，再给判断；封面写具体人群，不写抽象概念。' }},
+        {{ day:'周四', type:'系列栏目延伸', theme:primaryTheme, mode:'series', goal:'记忆点：把高分主题做成固定栏目。', action:'标题加“第1条/第2条”或固定栏目名，形成追更理由。' }},
+        {{ day:'周五', type:'评论区互动', theme:primaryTheme, mode:'pain', goal:'互动：让用户留下自己的问题。', action:'结尾只问一个问题；发出后 30 分钟内高频回复，并挑 1 条评论做次日选题。' }},
+        {{ day:'周六', type:'信任资产沉淀', theme:secondaryTheme, mode:'trust', goal:'转粉：把你的方法论和人设说清楚。', action:'做一条“我为什么做这个账号/我能帮你解决什么”的内容，置顶或加入合集。' }},
+        {{ day:'周日', type:'复盘与下周预热', theme:primaryTheme, mode:'story', goal:'复看：总结一周主题，预告下周系列。', action:'发布“这周最扎心的 3 个真相”，评论区收集下周想看的问题。' }},
+      ].map((x,i)=>{{
+        const title = titleSeed(x.theme, primaryPain, x.mode, best);
+        const cover = x.mode === 'trust'
+          ? ['别只听懂', '照着做才变好', x.theme.split('/')[0]]
+          : x.mode === 'series'
+            ? ['这个系列', '专治反复内耗', x.theme.split('/')[0]]
+            : ['你不是不行', '是卡在这里', primaryPain.slice(0,8)];
+        return {{...x, title, cover}};
+      }});
+
+      $('#calendar').innerHTML = plan.map(x=>`
+        <div class="panel day plan-card">
+          <strong>${{esc(x.day)}}</strong>
+          <p class="muted">${{esc(x.type)}} · ${{esc(x.theme)}}</p>
+          <h3>${{esc(x.title)}}</h3>
+          <div class="day-cover">${{esc(x.cover.join(' / '))}}</div>
+          <div class="day-goal">${{esc(x.goal)}}</div>
+          <ul>
+            <li>${{esc(x.action)}}</li>
+            <li>文案结构：痛点一句话 -> 误区翻转 -> 具体动作 -> 评论区问题。</li>
+            <li>发布后：30 分钟内回复评论，记录高频问题进选题库。</li>
+          </ul>
+        </div>`).join('');
+
+      const trustCards = [
+        {{
+          title:'涨粉动作：把单条爆点做成系列',
+          items:['从最高分作品里提炼一个固定栏目名，每周至少连续 3 条。','每条结尾统一一句关注理由：关注我，下一条继续拆“怎么做”。','主页置顶 1 条“你是谁、你帮谁、解决什么问题”。']
+        }},
+        {{
+          title:'信任感动作：从金句升级到方法',
+          items:['每条至少给一个能当天执行的动作，避免只让用户“被说中”。','每 3 条情绪共鸣内容，搭配 1 条清单/步骤/案例拆解。','把评论区真实问题改成视频标题，用户会感觉你在现场解决问题。']
+        }},
+        {{
+          title:'封面与标题动作：固定识别资产',
+          items:['封面三行字固定：痛点人群 + 反常识判断 + 栏目标签。','标题少用空泛词，多用“你/不是/其实/为什么/别再”。','低分作品先改封面和前 3 秒，不急着推翻整条文案。']
+        }},
+        {{
+          title:'运营动作：让粉丝留下来',
+          items:['每天固定回复 20 条评论，优先回复“我也是/怎么办/怎么改”。','把高频问题整理成“下周选题池”，周日做一次预告。','建立合集：新粉进主页后能按主题连续看，信任更快形成。']
+        }}
+      ];
+      $('#trustActions').innerHTML = trustCards.map(card=>`
+        <div class="panel trust-card">
+          <div class="module-label">growth action</div>
+          <h2>${{esc(card.title)}}</h2>
+          <ul>${{card.items.map(item=>`<li>${{esc(item)}}</li>`).join('')}}</ul>
+        </div>`).join('');
+    }}
+
+    function switchView(id) {{
+      $$('.view').forEach(v=>v.classList.toggle('active', v.id===id));
+      $$('nav button').forEach(b=>b.classList.toggle('active', b.dataset.view===id));
+      document.body.dataset.view = id;
+    }}
+
+    function renderRefreshStatus(data) {{
+      const status = $('#refreshStatus');
+      const homeStatus = $('#homeRefreshStatus');
+      const log = $('#refreshLog');
+      if (!data) return;
+      const okText = data.ok === true ? '完成' : data.ok === false ? '失败' : data.running ? '进行中' : '待命';
+      const sourceLine = data.sourceUrl ? `<br><span class="muted">来源：${{esc(data.sourceUrl)}}</span>` : '';
+      const html = `<b>状态：</b>${{esc(okText)}}　<b>步骤：</b>${{esc(data.step || '-')}}<br><span class="muted">${{esc(data.message || '')}}</span>${{sourceLine}}`;
+      if (status) status.innerHTML = html;
+      if (homeStatus) homeStatus.innerHTML = html;
+      if (log && data.logs?.length) {{
+        log.classList.remove('hidden');
+        log.textContent = data.logs.join('\\n');
+        log.scrollTop = log.scrollHeight;
+      }}
+      if (data.ok === true && state.refreshStarted) {{
+        state.refreshStarted = false;
+        setTimeout(()=>location.reload(), 1200);
+      }}
+    }}
+
+    async function pollRefreshStatus() {{
+      try {{
+        const res = await fetch(apiUrl('/api/refresh-status?t=' + Date.now()), apiOptions({{ cache:'no-store' }}));
+        const data = await res.json();
+        renderRefreshStatus(data);
+        if (data.running) setTimeout(pollRefreshStatus, 2500);
+      }} catch (err) {{
+        const message = '<b>状态：</b>无法连接本地刷新服务，请确认正在使用 http://127.0.0.1:8787/ 打开工作台。';
+        if ($('#refreshStatus')) $('#refreshStatus').innerHTML = message;
+        if ($('#homeRefreshStatus')) $('#homeRefreshStatus').innerHTML = message;
+      }}
+    }}
+
+    function setRefreshButtonsDisabled(disabled) {{
+      ['refreshDouyin','homeRefreshDouyin','refreshProfile','homeRefreshProfile'].forEach(id => {{
+        const el = $('#' + id);
+        if (el) el.disabled = disabled;
+      }});
+    }}
+
+    async function startDouyinRefresh() {{
+      state.refreshStarted = true;
+      setRefreshButtonsDisabled(true);
+      const starting = '<b>状态：</b>正在启动自动抓取...';
+      if ($('#refreshStatus')) $('#refreshStatus').innerHTML = starting;
+      if ($('#homeRefreshStatus')) $('#homeRefreshStatus').innerHTML = starting;
+      try {{
+        const res = await fetch(apiUrl('/api/refresh'), apiOptions({{ method:'POST', cache:'no-store' }}));
+        renderRefreshStatus(await res.json());
+        pollRefreshStatus();
+      }} catch (err) {{
+        const failed = '<b>状态：</b>启动失败，请确认通过 http://127.0.0.1:8787/ 打开工作台。';
+        if ($('#refreshStatus')) $('#refreshStatus').innerHTML = failed;
+        if ($('#homeRefreshStatus')) $('#homeRefreshStatus').innerHTML = failed;
+      }} finally {{
+        setTimeout(()=>{{
+          setRefreshButtonsDisabled(false);
+        }}, 3000);
+      }}
+    }}
+
+    async function startProfileRefresh(source) {{
+      const homeInput = $('#homeProfileUrl');
+      const pageInput = $('#profileUrl');
+      const url = (source || homeInput?.value || pageInput?.value || '').trim();
+      if (!url) {{
+        const failed = '<b>状态：</b>请先粘贴抖音博主主页分享链接。';
+        if ($('#refreshStatus')) $('#refreshStatus').innerHTML = failed;
+        if ($('#homeRefreshStatus')) $('#homeRefreshStatus').innerHTML = failed;
+        return;
+      }}
+      if (homeInput) homeInput.value = url;
+      if (pageInput) pageInput.value = url;
+      state.refreshStarted = true;
+      setRefreshButtonsDisabled(true);
+      const starting = '<b>状态：</b>正在按主页链接抓取博主作品...';
+      if ($('#refreshStatus')) $('#refreshStatus').innerHTML = starting;
+      if ($('#homeRefreshStatus')) $('#homeRefreshStatus').innerHTML = starting;
+      try {{
+        const res = await fetch(apiUrl('/api/refresh-profile'), apiOptions({{
+          method:'POST',
+          cache:'no-store',
+          headers:{{'Content-Type':'application/json'}},
+          body:JSON.stringify({{url}})
+        }}));
+        renderRefreshStatus(await res.json());
+        pollRefreshStatus();
+      }} catch (err) {{
+        const failed = '<b>状态：</b>启动失败，请确认通过 http://127.0.0.1:8787/ 打开工作台。';
+        if ($('#refreshStatus')) $('#refreshStatus').innerHTML = failed;
+        if ($('#homeRefreshStatus')) $('#homeRefreshStatus').innerHTML = failed;
+      }} finally {{
+        setTimeout(()=>setRefreshButtonsDisabled(false), 3000);
+      }}
+    }}
+
+    $$('nav button').forEach(btn=>btn.addEventListener('click',()=>switchView(btn.dataset.view)));
+    $('#searchVideo').addEventListener('input', renderVideoList);
+    $('#themeFilter').addEventListener('change', renderVideoList);
+    $('#viewNeedVideos').addEventListener('click', showNeedVideos);
+    $('#filterNeeds').addEventListener('click',()=>{{ state.onlyNeeds = !state.onlyNeeds; renderVideoList(); }});
+    $('#sortScore').addEventListener('click', e=>{{ e.currentTarget.dataset.sort = e.currentTarget.dataset.sort === 'on' ? '' : 'on'; renderVideoList(); }});
+    $('#analyzeDraft').addEventListener('click', analyzeDraft);
+    $('#plainRewrite').addEventListener('click', plainRewriteDraft);
+    $('#useBestVideo').addEventListener('click',()=>loadVideoToOptimizer([...state.videos].sort((a,b)=>b.scores.score-a.scores.score)[0].idx));
+    $('#analyzeViral').addEventListener('click', analyzeViral);
+    $('#generateIdeas').addEventListener('click', generateIdeas);
+    $('#copyIdeas').addEventListener('click', async()=>{{ await navigator.clipboard.writeText($('#ideasResult').dataset.copy || ''); }});
+    $('#ideaTheme').addEventListener('change', generateIdeas);
+    $('#ideaPain').addEventListener('change', generateIdeas);
+    $('#ideaThemeCustom').addEventListener('input', generateIdeas);
+    $('#ideaPainCustom').addEventListener('input', generateIdeas);
+    $('#ideaViralCase').addEventListener('change', generateIdeas);
+    $('#homeRefreshDouyin').addEventListener('click', startDouyinRefresh);
+    $('#refreshDouyin').addEventListener('click', startDouyinRefresh);
+    $('#homeRefreshProfile').addEventListener('click',()=>startProfileRefresh($('#homeProfileUrl').value));
+    $('#refreshProfile').addEventListener('click',()=>startProfileRefresh($('#profileUrl').value));
+    $('#homeProfileUrl').addEventListener('input', e=>{{ if ($('#profileUrl')) $('#profileUrl').value = e.target.value; }});
+    $('#profileUrl').addEventListener('input', e=>{{ if ($('#homeProfileUrl')) $('#homeProfileUrl').value = e.target.value; }});
+    $('#checkRefresh').addEventListener('click', pollRefreshStatus);
+    ['draftHook','ideaHook'].forEach(sel => {{
+      const el = $('#' + sel);
+      if (el) el.addEventListener('change', e=>syncHookSelects(e.target.value));
+    }});
+
+    renderSelectors();
+    renderHookFormulas();
+    renderKpis();
+    renderVideoList();
+    renderPlanner();
+    generateIdeas();
+    pollRefreshStatus();
+  </script>
+</body>
+</html>"""
+
+
+def main():
+    subprocess.run(
+        [sys.executable, "scripts/build_danao_knowledge.py"],
+        cwd=str(ROOT),
+        check=False,
+    )
+    items = json.loads(DATA_PATH.read_text(encoding="utf-8"))
+    rows = build_rows(items)
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    OUT_FILE.write_text(render(rows), encoding="utf-8")
+    print(OUT_FILE)
+
+
+if __name__ == "__main__":
+    main()
