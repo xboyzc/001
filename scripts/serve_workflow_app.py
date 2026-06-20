@@ -210,8 +210,15 @@ def read_json_body(handler):
         return {}
 
 
+def extract_share_url(text):
+    match = re.search(r"https?://[^\s，。；,;]+", text or "")
+    if not match:
+        return ""
+    return match.group(0).rstrip(")）]}>\"'")
+
+
 def resolve_douyin_url(url):
-    url = (url or "").strip()
+    url = extract_share_url(url) or (url or "").strip()
     if not url:
         return ""
     if "v.douyin.com" not in url:
@@ -275,6 +282,13 @@ def pick_count(stats, key):
         return 0
 
 
+def safe_int(value):
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
 def save_viral_cover(url, aweme_id):
     if not url or not aweme_id:
         return ""
@@ -334,6 +348,46 @@ def download_viral_media(url, aweme_id, referer="https://www.douyin.com/"):
     return str(path)
 
 
+def download_viral_media_ytdlp(source_url, aweme_id):
+    source_url = extract_share_url(source_url) or (source_url or "").strip()
+    if not source_url or not aweme_id:
+        return ""
+    try:
+        import yt_dlp
+    except Exception:
+        return ""
+    VIRAL_MEDIA_DIR.mkdir(parents=True, exist_ok=True)
+    safe_id = re.sub(r"[^0-9A-Za-z_-]", "", str(aweme_id)) or "viral"
+    outtmpl = str(VIRAL_MEDIA_DIR / f"{safe_id}-%(id)s.%(ext)s")
+    opts = {
+        "quiet": True,
+        "no_warnings": True,
+        "noplaylist": True,
+        "format": "best[ext=mp4]/best",
+        "outtmpl": outtmpl,
+        "socket_timeout": 45,
+        "retries": 2,
+    }
+    try:
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(source_url, download=True) or {}
+    except Exception:
+        return ""
+    candidates = []
+    for item in info.get("requested_downloads") or []:
+        path = item.get("filepath") or item.get("_filename") or ""
+        if path:
+            candidates.append(Path(path))
+    prepared = info.get("_filename") or ""
+    if prepared:
+        candidates.append(Path(prepared))
+    candidates.extend(VIRAL_MEDIA_DIR.glob(f"{safe_id}-*.*"))
+    valid = [p for p in candidates if p.exists() and p.stat().st_size > 100000]
+    if not valid:
+        return ""
+    return str(max(valid, key=lambda p: p.stat().st_mtime))
+
+
 def transcribe_viral_media(media_path, aweme_id):
     if not media_path or not Path(media_path).exists():
         return ""
@@ -367,21 +421,50 @@ def transcribe_viral_media(media_path, aweme_id):
             pass
 
 
-def enrich_with_video_transcript(result, play_url, aweme_id, referer):
+def cached_viral_transcript(aweme_id):
+    safe_id = re.sub(r"[^0-9A-Za-z_-]", "", str(aweme_id)) or "viral"
+    out_path = VIRAL_TRANSCRIPT_DIR / f"{safe_id}.txt"
+    try:
+        return out_path.read_text(encoding="utf-8").strip() if out_path.exists() else ""
+    except Exception:
+        return ""
+
+
+def enrich_with_video_transcript(result, play_url, aweme_id, referer, original_url=""):
     if result.get("transcriptSource") == "本地 Whisper 转写稿" and (result.get("fullText") or "").strip():
         result["videoTranscriptStatus"] = "done"
         return result
-    if not result.get("ok") or not play_url or not aweme_id:
+    if not result.get("ok") or not aweme_id:
         result["transcriptSource"] = result.get("transcriptSource") or "页面文案"
         return result
+    transcript = cached_viral_transcript(aweme_id)
+    if transcript:
+        result["videoTranscriptStatus"] = "done"
+        result["transcriptSource"] = "已保存的 Whisper 逐字转写稿"
+        result["transcriptPreview"] = transcript[:900]
+        result["fullText"] = transcript
+        result["elements"] = [
+            "已读取该视频上次生成的 Whisper 逐字转写稿，不重复保存原始视频。",
+            "以下二创优先基于真实口播转写稿，而不是页面简介或标题。",
+            *(result.get("elements") or []),
+        ][:7]
+        return result
+    media_path = ""
+    errors = []
     try:
-        media_path = download_viral_media(play_url, aweme_id, referer=referer)
+        if play_url:
+            media_path = download_viral_media(play_url, aweme_id, referer=referer)
+    except Exception as exc:
+        errors.append(f"直连下载失败：{exc}")
+    if not media_path and original_url:
+        media_path = download_viral_media_ytdlp(original_url, aweme_id)
+        if not media_path:
+            errors.append("yt-dlp 兜底下载未拿到有效视频文件")
+    try:
         transcript = transcribe_viral_media(media_path, aweme_id) if media_path else ""
     except Exception as exc:
-        result["videoTranscriptStatus"] = "failed"
-        result["videoTranscriptError"] = str(exc)
-        result["transcriptSource"] = result.get("transcriptSource") or "页面文案"
-        return result
+        transcript = ""
+        errors.append(f"Whisper 转写失败：{exc}")
     if transcript:
         result["videoTranscriptStatus"] = "done"
         result["transcriptSource"] = "下载视频后 Whisper 逐字转写"
@@ -393,9 +476,101 @@ def enrich_with_video_transcript(result, play_url, aweme_id, referer):
             *(result.get("elements") or []),
         ][:7]
     else:
-        result["videoTranscriptStatus"] = "empty"
+        result["videoTranscriptStatus"] = "failed" if errors else "empty"
+        if errors:
+            result["videoTranscriptError"] = "；".join(errors[-3:])
         result["transcriptSource"] = result.get("transcriptSource") or "页面文案"
     return result
+
+
+def ytdlp_info_url(info):
+    if not isinstance(info, dict):
+        return ""
+    if info.get("url") and str(info.get("url")).startswith("http"):
+        return info.get("url")
+    for item in info.get("requested_formats") or []:
+        url = item.get("url") or ""
+        if url and item.get("vcodec") != "none":
+            return url
+    for item in info.get("formats") or []:
+        url = item.get("url") or ""
+        if url and item.get("vcodec") != "none":
+            return url
+    for item in info.get("formats") or []:
+        url = item.get("url") or ""
+        if url:
+            return url
+    return ""
+
+
+def ytdlp_thumb(info):
+    if not isinstance(info, dict):
+        return ""
+    if info.get("thumbnail"):
+        return info.get("thumbnail")
+    thumbs = info.get("thumbnails") or []
+    return (thumbs[-1] or {}).get("url", "") if thumbs else ""
+
+
+def analyze_external_with_ytdlp(original_url):
+    source_url = extract_share_url(original_url) or (original_url or "").strip()
+    if not source_url:
+        return {"error": "没有识别到单条视频链接"}
+    try:
+        import yt_dlp
+    except Exception as exc:
+        return {"error": f"yt-dlp 不可用：{exc}"}
+    try:
+        with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True, "noplaylist": True, "socket_timeout": 35, "retries": 2}) as ydl:
+            info = ydl.extract_info(source_url, download=False) or {}
+    except Exception as exc:
+        return {"error": str(exc)}
+    aweme_id = str(info.get("id") or extract_aweme_id(info.get("webpage_url") or source_url) or "")
+    title = (info.get("title") or info.get("description") or f"抖音作品 {aweme_id}").strip()
+    desc = (info.get("description") or "").strip()
+    text = desc or title
+    cover_url = ytdlp_thumb(info)
+    play_url = ytdlp_info_url(info)
+    if not aweme_id and not (text or cover_url or play_url):
+        return {"error": "yt-dlp 未返回作品信息"}
+    local_cover = save_viral_cover(cover_url, aweme_id) or cover_url
+    result = {
+        "ok": True,
+        "matched": False,
+        "source": "yt-dlp 已从单条视频链接提取作品信息",
+        "url": info.get("webpage_url") or source_url,
+        "resolvedUrl": info.get("webpage_url") or source_url,
+        "awemeId": aweme_id,
+        "title": re.sub(r"#\S+", "", title).strip() or f"抖音作品 {aweme_id}",
+        "theme": "外部爆款拆解",
+        "transcriptPreview": text[:900],
+        "fullText": text,
+        "scores": {
+            "hook": 78 if any(w in text[:80] for w in ["你", "为什么", "其实", "不是", "别"]) else 66,
+            "conflict": 82 if any(w in text for w in ["不是", "而是", "其实", "真正", "别再"]) else 70,
+            "structure": 78 if len(text) >= 160 else 62,
+            "action": 76 if any(w in text for w in ["评论", "收藏", "关注", "做", "试试", "方法"]) else 64,
+            "cover": 82 if cover_url else 62,
+        },
+        "stats": {
+            "play": safe_int(info.get("view_count")),
+            "likes": safe_int(info.get("like_count")),
+            "comments": safe_int(info.get("comment_count")),
+            "collects": 0,
+            "shares": safe_int(info.get("repost_count")),
+        },
+        "cover": ["对照原封面", "提炼痛点大字", "重做三行标题"],
+        "coverImage": local_cover,
+        "coverSource": cover_url,
+        "playUrl": play_url,
+        "transcriptSource": "yt-dlp 标题/简介，优先尝试视频转写",
+        "elements": [
+            "接口和浏览器提取不稳定时，已启用 yt-dlp 单条视频兜底。",
+            "系统会临时下载视频做 Whisper 逐字转写，完成后删除原始视频。",
+            "以下拆解只基于当前链接，不调用历史账号主题。",
+        ],
+    }
+    return enrich_with_video_transcript(result, play_url, aweme_id or "viral", info.get("webpage_url") or source_url, original_url=source_url)
 
 
 def fetch_aweme_detail(aweme_id):
@@ -436,12 +611,12 @@ def analyze_external_aweme(original_url, resolved_url, aweme_id):
     caption = item.get("caption") or ""
     text = caption or desc or title
     has_real_text = bool((caption or desc or title or "").strip())
-    if not has_real_text:
-        return {"error": "详情接口返回了作品对象，但没有标题、文案或字幕内容"}
     cover_url = (
         complete_cover_url(video)
     )
     play_url = complete_play_url(video)
+    if not has_real_text and not (cover_url or play_url):
+        return {"error": "详情接口返回了作品对象，但没有标题、文案、封面或视频流"}
     local_cover = save_viral_cover(cover_url, aweme_id) or cover_url
     clean_title = re.sub(r"#\S+", "", title or desc or f"抖音作品 {aweme_id}").strip()
     if not clean_title:
@@ -475,15 +650,15 @@ def analyze_external_aweme(original_url, resolved_url, aweme_id):
         "coverImage": local_cover,
         "coverSource": cover_url,
         "playUrl": play_url,
-        "transcriptSource": "页面标题/简介/字幕",
+        "transcriptSource": "页面标题/简介/字幕" if has_real_text else "页面未返回文案，已改走视频转写",
         "elements": [
-            "已从视频链接提取标题/简介/字幕文案，用真实内容做拆解。",
+            "已从视频链接提取标题/简介/字幕文案，用真实内容做拆解。" if has_real_text else "页面接口没有返回文案，系统已继续临时下载视频并做 Whisper 转写。",
             "先看黄金三秒是否直接点名人群、痛点或反常识结论。",
             "中段按真实文案判断是否有“场景-冲突-观点-动作”的推进。",
             "封面图已保存到本地，用于归档后对照复盘。",
         ],
     }
-    return enrich_with_video_transcript(result, play_url, aweme_id, f"https://www.douyin.com/video/{aweme_id}")
+    return enrich_with_video_transcript(result, play_url, aweme_id, f"https://www.douyin.com/video/{aweme_id}", original_url=original_url or resolved_url)
 
 
 def analyze_external_with_browser(original_url):
@@ -505,7 +680,13 @@ def analyze_external_with_browser(original_url):
     except Exception:
         return {"error": "浏览器提取没有返回可解析数据"}
     if not data.get("ok"):
-        return {"error": data.get("message") or "浏览器没有捕获到详情数据", **data}
+        if data.get("awemeId") and (data.get("playUrl") or data.get("coverSource")):
+            data["ok"] = True
+            data["fullText"] = data.get("fullText") or data.get("title") or ""
+            data["transcriptPreview"] = data.get("transcriptPreview") or data.get("fullText", "")[:900]
+            data["transcriptSource"] = "页面未返回文案，已改走视频转写"
+        else:
+            return {"error": data.get("message") or "浏览器没有捕获到详情数据", **data}
     aweme_id = data.get("awemeId") or extract_aweme_id(data.get("url", ""))
     cover_source = data.get("coverSource") or ""
     data["coverImage"] = save_viral_cover(cover_source, aweme_id) or cover_source
@@ -523,7 +704,7 @@ def analyze_external_with_browser(original_url):
         "以下拆解只基于该链接返回的真实内容，不再使用通用兜底模板。",
         "封面图已保存到本地，用于归档后对照复盘。",
     ]
-    return enrich_with_video_transcript(data, data.get("playUrl") or "", aweme_id, data.get("url") or original_url)
+    return enrich_with_video_transcript(data, data.get("playUrl") or "", aweme_id, data.get("url") or original_url, original_url=original_url)
 
 
 def load_workflow_rows():
@@ -535,7 +716,8 @@ def load_workflow_rows():
 
 
 def local_viral_analysis(url):
-    original_url = (url or "").strip()
+    pasted = (url or "").strip()
+    original_url = extract_share_url(pasted) or pasted
     resolved_url = resolve_douyin_url(original_url)
     aweme_id = extract_aweme_id(resolved_url) or extract_aweme_id(original_url)
     rows = load_workflow_rows()
@@ -590,13 +772,16 @@ def local_viral_analysis(url):
     browser_external = analyze_external_with_browser(original_url)
     if browser_external.get("ok"):
         return browser_external
+    ytdlp_external = analyze_external_with_ytdlp(original_url)
+    if ytdlp_external.get("ok"):
+        return ytdlp_external
     return {
         "ok": False,
         "matched": False,
         "source": "链接内容提取失败",
-        "url": original_url,
+        "url": original_url or pasted,
         "resolvedUrl": resolved_url,
-        "message": f"没有从这个链接提取到真实视频标题、文案或封面。接口提取：{external.get('error') or '未知原因'}；浏览器提取：{browser_external.get('error') or '未知原因'}。请确认复制的是单条公开视频分享链接。",
+        "message": f"没有从这个链接提取到真实视频标题、文案、封面或可转写视频。接口提取：{external.get('error') or '未知原因'}；浏览器提取：{browser_external.get('error') or '未知原因'}；yt-dlp 兜底：{ytdlp_external.get('error') or '未知原因'}。请确认复制的是单条公开视频分享链接。",
     }
 
 
