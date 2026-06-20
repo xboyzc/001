@@ -280,6 +280,11 @@ def render(rows):
     .qd-output-label {{ margin:10px 0; color:var(--muted); font-size:12px; }}
     .qd-output-actions {{ display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; margin-top:12px; }}
     .qd-output-actions button {{ padding:9px 11px; }}
+    .qd-agent-bar {{ display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:10px; color:var(--muted); font-size:12px; }}
+    .qd-agent-bar b {{ color:var(--active); }}
+    .qd-mode-row {{ display:flex; gap:8px; flex-wrap:wrap; margin:10px 0 12px; }}
+    .qd-mode {{ border:1px solid var(--line); border-radius:999px; padding:8px 11px; background:rgba(255,255,255,.055); color:#dce8f5; cursor:pointer; font-size:12px; font-weight:800; }}
+    .qd-mode.active {{ color:#06111e; border-color:rgba(255,255,255,.66); background:linear-gradient(135deg,var(--active),#fff07d); box-shadow:0 0 18px var(--active-soft); }}
     .calendar {{ grid-template-columns:repeat(7,minmax(0,1fr)); }}
     .day {{ min-height:120px; border-top:4px solid var(--day-color, var(--planner)); }}
     .day:nth-child(1) {{ --day-color:var(--optimizer); }}
@@ -898,7 +903,16 @@ cd /Users/a001/Documents/抖音工作流
           .replace(/情感/g, '表达')
           .replace(/女性成长/g, '个人成长')
           .replace(/追星/g, '兴趣表达')
-          .replace(/王一博/g, '这个人物');
+          .replace(/王一博/g, '这个人物')
+          .replace(/追星心理/g, '内容洞察')
+          .replace(/关系边界/g, '关键边界')
+          .replace(/高敏感/g, '高关注度')
+          .replace(/清醒局/g, '内容栏目')
+          .replace(/我先站回自己/g, '我先开始行动')
+          .replace(/把自己活回来/g, '把这件事做明白')
+          .replace(/被爱/g, '被理解')
+          .replace(/讨好/g, '迎合')
+          .replace(/内耗/g, '反复消耗');
       }}
       return out.replace(/\\n{3,}/g, '\\n\\n').trim();
     }}
@@ -1059,86 +1073,244 @@ cd /Users/a001/Documents/抖音工作流
       ].join('\\n\\n');
     }}
 
-    function makeQingdouStyleScript(x, topic, sentences) {{
-      const original = (x.fullText || x.transcriptPreview || x.title || '').trim();
-      const source = legacySafe(`${{topic}} ${{original}} ${{(x.elements || []).join(' ')}}`);
-      const topicName = safeClip(topic || linkTopic(x.title || '', original), 14) || '这件事';
-      const has = (words) => words.some(word => source.toLowerCase().includes(String(word).toLowerCase()));
-      const first = polishSentence(sentences[0] || x.title || topicName);
-      if (has(['cloud code','code x','claude','codex','ai','人工智能','智能体','编程','产品','工具','专业知识'])) {{
-        return finalDeepScriptGuard([
-          `当你真正开始使用 Cloud Code、Code X 或类似 AI 工具的那一刻，你打开的不是一个普通软件，而是一套全新的能力系统。`,
-          `过去很多看起来必须依赖专业团队、长期学习和大量试错的事情，现在都可以被你调动起来，变成你手里的创作资源。`,
-          `你会发现，专业知识不再只是少数人的门槛，它可以被提问、被组合、被执行，最后变成一个真实可用的产品、方案或工作流。`,
-          `所以真正重要的不是“我会不会所有技术”，而是你能不能把一个想法讲清楚，把需求拆明白，再让 AI 帮你一步一步落地。`,
-          `从这一刻开始，普通人最大的机会不是替代别人，而是把自己的经验、判断和想象力放大。你越敢提出问题，越敢验证结果，就越容易进入 AI 的新世界。`,
-          `如果你也想把 AI 变成自己的生产力，从今天开始别只围观，先拿一个真实需求试一次：写清楚目标，拆出步骤，做出第一个能被别人看见的小成果。`
-        ].join('\\n\\n'), source);
-      }}
-      if (has(['账号','内容','自媒体','流量','粉丝','变现','成交','客户','个人品牌','ip','获客','短视频'])) {{
-        return finalDeepScriptGuard([
-          `如果你正在做账号、做内容、做个人品牌，先别急着问下一条拍什么。`,
-          `真正决定用户会不会记住你的，不是你发得有多勤，也不是你用了多少热门模板，而是他能不能在几秒钟内听懂：你到底帮谁，解决什么问题，为什么值得相信。`,
-          `很多内容看起来热闹，播放也许会有波动，但用户看完以后没有留下理由。他不知道你是谁，不知道你能帮他什么，更不知道下一次为什么还要回来找你。`,
-          `表达上可以换一种讲法：先把用户最卡的场景说出来，再指出他一直误会的地方，最后给一个马上能执行的动作。不要只讲观点，要让对方看见自己，也看见下一步。`,
-          `你今天可以先做三件事。第一，用一句话写清楚你的服务对象。第二，用一个具体案例证明你的判断。第三，在结尾给用户一个明确问题，让他愿意评论，也愿意继续关注。`,
-          `内容的本质不是把话说满，而是把信任一点点搭起来。当用户开始觉得“这个人懂我，也真的能帮我”，你的流量才有机会变成关系，关系才有机会变成转化。`
-        ].join('\\n\\n'), source);
-      }}
-      if (has(['学习','考试','课程','知识','读书','方法','效率','训练','练习'])) {{
-        return finalDeepScriptGuard([
-          `如果你也在学习一件新东西，先不要把自己困在“我要准备到完美”里面。`,
-          `真正拉开差距的，往往不是谁收藏了更多资料，而是谁能更快把信息变成练习，把练习变成反馈。`,
-          `你看过很多方法，当下觉得很有道理，可一旦回到自己的生活里，又不知道从哪里开始。问题不在你不够努力，而是你缺少一个能立刻执行的小动作。`,
-          `所以接下来只做一件事：选一个最关键的知识点，用自己的话讲出来，马上做一次验证。不要等状态最好，也不要等资料最全。`,
-          `当你开始用输出倒逼理解，用反馈修正方向，你会从“我好像懂了”，慢慢变成“我真的会用了”。`,
-          `如果你现在也卡在学习和行动之间，评论区告诉我你最想学会哪一件事，我下一条直接给你拆执行步骤。`
-        ].join('\\n\\n'), source);
-      }}
-      if (has(['职场','工作','老板','同事','工资','副业','创业','面试','简历'])) {{
-        return finalDeepScriptGuard([
-          `如果你正在工作里反复消耗，先别急着否定自己。`,
-          `很多时候，你不是没有价值，而是一直在等别人主动看见你的价值。你做了很多事，却没有把结果讲清楚；你承担了很多责任，却没有把边界立起来。`,
-          `真正需要改变的，是你表达价值的方式。不要只说“我很努力”，要说清楚你解决了什么问题，带来了什么结果，下一步还能继续创造什么。`,
-          `从今天开始，把最近做过的事情整理成三类：结果、证据、下一步。每一次沟通都围绕这三类展开，你就不会只是在被动等待评价。`,
-          `当你能把自己的价值说清楚，你就会从等机会，变成争取机会；从害怕被替换，变成拥有选择权。`,
-          `如果你也想把工作里的主动权拿回来，先把你最近最拿得出手的一个结果写下来。`
-        ].join('\\n\\n'), source);
-      }}
-      const middle = sentences.slice(1, 4).map(polishSentence).filter(Boolean).join('。');
-      return finalDeepScriptGuard([
-        `如果你正在关注「${{topicName}}」，先把这句话听完。`,
-        `这件事真正有价值的地方，不只是${{first || '表面的信息'}}，而是它提醒你：很多问题不能只停在“我知道了”，还要变成一个能被执行的动作。`,
-        middle ? `你可以把它放进一个更具体的场景里看：${{middle}}。当这个场景被说清楚，用户才会觉得这不是一句空话，而是跟自己有关。` : `你可以把它放进自己的真实场景里看：你以为差的是更多信息，其实差的是一个清晰判断和下一步动作。`,
-        `接下来，表达上不要只复述原来的说法，而要把意思讲得更完整：先用一句强判断把人停住，再用一个具体画面让人代入，最后给出一个可以马上照做的方法。`,
-        `你今天就可以这样做：第一，把「${{topicName}}」里最关键的问题写下来。第二，用自己的话讲清楚它为什么重要。第三，把它拆成一个小动作，今天就完成一次。`,
-        `真正好的短视频，不是让人听完觉得“好像很厉害”，而是让人听完知道“我现在可以先做什么”。`,
-        `如果你也卡在「${{topicName}}」这件事上，评论区告诉我你最想先解决哪一步，我下一条继续拆给你看。`
-      ].join('\\n\\n'), source);
+    const viralCopyModes = [
+      {{ id:'standard', name:'智能二创', desc:'保留原意和结构，重写成可直接发布的成品稿。' }},
+      {{ id:'official', name:'官方', desc:'表达更正式、清楚、可信，适合品牌号和知识型内容。' }},
+      {{ id:'spoken', name:'口播式文案', desc:'更像真人出镜讲出来，有停顿、有推进、有互动。' }},
+      {{ id:'colloquial', name:'口语化方式', desc:'更大白话、更顺嘴，减少书面感和抽象词。' }}
+    ];
+
+    function viralModeById(mode) {{
+      return viralCopyModes.find(x=>x.id === mode) || viralCopyModes[0];
     }}
 
-    function makeViralRecreation(x) {{
+    function normalizeCurrentSourceText(text) {{
+      return cleanLinkText(String(text || ''))
+        .replace(/复制此链接.*$/g, '')
+        .replace(/打开.{0,4}搜索.*$/g, '')
+        .replace(/https?:\\/\\/\\S+/g, '')
+        .trim();
+    }}
+
+    function detectViralDomain(source) {{
+      const hay = String(source || '').toLowerCase();
+      const has = (words) => words.some(word => hay.includes(String(word).toLowerCase()));
+      if (has(['cloud code','claude','codex','ai','人工智能','智能体','大模型','编程','自动化','工具','产品','软件'])) return 'ai_tool';
+      if (has(['账号','内容','自媒体','短视频','流量','粉丝','变现','成交','客户','个人品牌','ip','获客','直播','投流'])) return 'content_business';
+      if (has(['学习','考试','课程','知识','读书','训练','练习','效率','复习','技能'])) return 'learning';
+      if (has(['职场','工作','老板','同事','工资','副业','创业','面试','简历','公司','项目'])) return 'career';
+      if (has(['产品','价格','门店','服务','装修','房子','汽车','品牌','购买','消费','体验','测评'])) return 'product_service';
+      if (has(['孩子','父母','家庭','教育','妈妈','爸爸','亲子','老师','学生'])) return 'family_education';
+      if (has(['健康','饮食','运动','睡眠','身体','医生','医院','减肥','营养'])) return 'health';
+      return 'general';
+    }}
+
+    function makeFreshViralCopyAgent(x, mode='standard') {{
+      const original = normalizeCurrentSourceText(x.fullText || x.transcriptPreview || x.title || '');
+      const title = normalizeCurrentSourceText(x.title || '');
+      const deep = (x.deepDive || []).flatMap(sec => sec.items || []).join(' ');
+      const elements = (x.elements || []).join(' ');
+      const currentSource = normalizeCurrentSourceText(`${{title}} ${{original}} ${{elements}}`);
+      const guidance = normalizeCurrentSourceText(deep);
+      const source = normalizeCurrentSourceText(`${{currentSource}} ${{guidance}}`);
+      const topic = safeClip(linkTopic(title, original), 16) || '这个主题';
+      const sentences = splitSentences(original, 10).map(normalizeCurrentSourceText).filter(Boolean);
+      const modeMeta = viralModeById(mode);
+      const seed = `${{Date.now().toString(36)}}-${{Math.random().toString(36).slice(2,7)}}`;
+      return {{
+        id:`copy-agent-${{seed}}`,
+        mode:modeMeta,
+        source,
+        currentSource,
+        guidance,
+        original,
+        title,
+        topic,
+        sentences,
+        domain:detectViralDomain(source),
+        sourceNote:'仅使用当前链接提取文案、当前链接深度拆解和当前封面信息，不读取历史账号主题。'
+      }};
+    }}
+
+    function viralDomainLabel(domain) {{
+      return ({{
+        ai_tool:'AI 工具/智能体',
+        content_business:'内容商业/IP',
+        learning:'学习训练',
+        career:'职场项目',
+        product_service:'产品服务',
+        family_education:'家庭教育',
+        health:'健康生活',
+        general:'当前链接主题'
+      }})[domain] || '当前链接主题';
+    }}
+
+    function agentFrame(agent) {{
+      const topic = agent.topic;
+      const second = safeClip(agent.sentences[1] || '', 38);
+      const frames = {{
+        ai_tool: {{
+          audience:'想把 AI 工具真正用起来的人',
+          hook:`如果你已经开始接触「${{topic}}」，别只把它当成一个新软件。`,
+          scene:`很多人看到新工具，只停在围观、收藏和转发，真正要做东西的时候，还是不知道怎么把想法拆成步骤。`,
+          insight:`关键不是你要一下子懂完所有技术，而是先把目标说清楚，把任务拆明白，再让工具帮你执行和验证。`,
+          method:['写清楚你想完成的结果', '把结果拆成三到五个可执行步骤', '每一步都让工具给出版本，再用真实反馈修正'],
+          ending:'如果你也想把 AI 变成生产力，今天就拿一个真实需求试一次，不要只停在看懂。'
+        }},
+        content_business: {{
+          audience:'正在做账号、内容或个人品牌的人',
+          hook:`如果你正在围绕「${{topic}}」做内容，先别急着追模板。`,
+          scene:`很多内容看起来很热闹，但用户看完不知道你是谁，也不知道你到底能帮他解决什么。`,
+          insight:`真正要复制的不是原句，而是它先抓问题、再给判断、最后给行动的顺序。`,
+          method:['用一句话说清你帮谁解决什么问题', '用一个具体场景证明你理解用户', '结尾给一个明确动作，让用户知道下一步怎么做'],
+          ending:'内容的目的不是把话说满，而是让用户愿意记住你、相信你、继续看你。'
+        }},
+        learning: {{
+          audience:'正在学习或训练一项能力的人',
+          hook:`如果你也在研究「${{topic}}」，别再只收集方法。`,
+          scene:`很多人收藏了很多经验，当下很有动力，但第二天回到自己身上还是不知道先做哪一步。`,
+          insight:`真正拉开差距的不是信息量，而是你能不能把信息变成练习，再把练习变成反馈。`,
+          method:['先选一个最关键的问题', '用自己的话讲一遍', '当天做一次最小练习并记录反馈'],
+          ending:'你不用等完全准备好，先完成一次小闭环，能力才会真的开始长出来。'
+        }},
+        career: {{
+          audience:'正在处理工作、项目或职业选择的人',
+          hook:`如果你正在面对「${{topic}}」，先别只想着忍一忍或者再等等。`,
+          scene:`很多人做了不少事，但表达时讲不清结果，争取机会时拿不出证据。`,
+          insight:`你需要的不是把自己说得更辛苦，而是把价值、结果和下一步讲清楚。`,
+          method:['列出最近做出的具体结果', '说明这个结果对别人有什么价值', '提出下一步可执行方案'],
+          ending:'当你能把价值说清楚，机会就不只是等来的，而是可以主动争取的。'
+        }},
+        product_service: {{
+          audience:'正在做选择、买产品或判断服务的人',
+          hook:`关于「${{topic}}」，你最该看的不是表面卖点。`,
+          scene:`很多选择一开始看着很心动，真正用起来才发现它不适合自己的真实场景。`,
+          insight:`判断值不值得，先看需求是否匹配，再看长期使用成本，而不是只看当下吸不吸引人。`,
+          method:['写下三个真实使用场景', '把每个选择放进场景里比较', '只为长期能用到的价值买单'],
+          ending:'别为一时冲动做决定，让选择回到真实需求里。'
+        }},
+        family_education: {{
+          audience:'正在面对家庭、亲子或教育问题的人',
+          hook:`如果你正在为「${{topic}}」着急，先别急着控制结果。`,
+          scene:`很多沟通越想讲清楚，越容易变成互相较劲，最后真正的问题反而被情绪盖住。`,
+          insight:`有效沟通不是谁压过谁，而是先把感受放稳，再把问题拆小。`,
+          method:['先停下来确认真正的问题', '把指责换成具体请求', '只讨论下一步怎么做'],
+          ending:'当沟通从情绪里出来，问题才有机会被一起解决。'
+        }},
+        health: {{
+          audience:'正在关注健康、身体或生活习惯的人',
+          hook:`如果你正在关注「${{topic}}」，先别被单一结论带着走。`,
+          scene:`很多人听到一个方法就马上照做，但忽略了自己的身体状态、生活节奏和长期坚持成本。`,
+          insight:`真正有用的改变，一定是能被你稳定执行、能被反馈验证的。`,
+          method:['先确认自己的基础情况', '只改一个最容易坚持的小习惯', '连续记录一周反馈再调整'],
+          ending:'不要追求一下子改变很多，能长期做下去的动作才更有价值。'
+        }},
+        general: {{
+          audience:`正在关注「${{topic}}」的人`,
+          hook:`如果你正在关注「${{topic}}」，先抓住一个关键点。`,
+          scene: second ? `表面看是在讲「${{topic}}」，真正要放大的，是用户为什么会停下来、为什么会继续听。` : `表面看这只是一个信息点，但真正能留下来的，是它能不能帮你做出一个判断。`,
+          insight:`这类内容真正要讲清楚的，是问题为什么重要、误区在哪里、下一步该怎么做。`,
+          method:[`先把「${{topic}}」里的核心问题说清楚`, '再换一个新例子讲明白原因', '最后给一个今天就能执行的小动作'],
+          ending:`如果你也卡在「${{topic}}」这里，先从一个小动作开始，不要只停在看懂。`
+        }}
+      }};
+      return frames[agent.domain] || frames.general;
+    }}
+
+    function composeAgentScript(agent) {{
+      const frame = agentFrame(agent);
+      const mode = agent.mode.id;
+      const methodLine = frame.method.map((item, i)=>`${{['第一','第二','第三'][i] || `第${{i+1}}`}}，${{item}}`).join('。');
+      if (mode === 'official') {{
+        return [
+          `针对「${{agent.topic}}」，最重要的是先建立一个清晰判断。`,
+          `${{frame.scene}}`,
+          `${{frame.insight}}`,
+          `具体执行上，可以分为三个步骤。${{methodLine}}。`,
+          `${{frame.ending}}`
+        ].join('\\n\\n');
+      }}
+      if (mode === 'spoken') {{
+        return [
+          `${{frame.hook}}`,
+          `你会发现，${{frame.scene}}`,
+          `所以这件事不能只讲一个结论，真正要讲透的是：${{frame.insight}}`,
+          `接下来你就记住三步。${{methodLine}}。`,
+          `${{frame.ending}}`,
+          `如果你也遇到过类似情况，评论区告诉我你现在最卡的是哪一步，我下一条继续拆。`
+        ].join('\\n\\n');
+      }}
+      if (mode === 'colloquial') {{
+        return [
+          `说白了，「${{agent.topic}}」这件事，别只看表面热闹。`,
+          `${{frame.scene}}`,
+          `真正有用的点在这里：${{frame.insight}}`,
+          `你不用一下子做很多，先按这三步来：${{methodLine}}。`,
+          `${{frame.ending}}`,
+          `先别收藏完就算了，今天就挑一步做。做完你再回头看，感觉会完全不一样。`
+        ].join('\\n\\n');
+      }}
+      return [
+        `${{frame.hook}}`,
+        `${{frame.scene}}`,
+        `${{frame.insight}}`,
+        `接下来直接把它落成一个更完整的行动路径：${{methodLine}}。`,
+        `${{frame.ending}}`,
+        `如果你也在关注「${{agent.topic}}」，评论区告诉我你最想先解决哪一步，我继续给你拆。`
+      ].join('\\n\\n');
+    }}
+
+    function removeOldCoreLeak(script, agent) {{
+      let out = String(script || '');
+      const source = agent?.currentSource || agent?.source || '';
+      const blocked = [
+        ['我先站回自己', '我先开始行动'],
+        ['把自己活回来', '把这件事做明白'],
+        ['你追的不是他', `你关注的是「${{agent?.topic || '这个主题'}}」背后的关键信息`],
+        ['是不敢活的自己', '是还没有被你用起来的判断'],
+        ['追星心理', '内容洞察'],
+        ['女性成长', '能力成长'],
+        ['清醒局', '内容栏目'],
+        ['王一博', '当前人物'],
+        ['太敏感', '过度反应'],
+        ['被爱', '被理解'],
+        ['内耗', '反复消耗']
+      ];
+      blocked.forEach(([bad, good]) => {{
+        if (!source.includes(bad)) out = out.split(bad).join(good);
+      }});
+      return out.replace(/\\n{3,}/g, '\\n\\n').trim();
+    }}
+
+    function makeQingdouStyleScript(x, mode='standard') {{
+      const agent = makeFreshViralCopyAgent(x, mode);
+      const script = removeOldCoreLeak(finalDeepScriptGuard(composeAgentScript(agent), agent.currentSource || agent.source), agent);
+      return {{ script, agent }};
+    }}
+
+    function makeViralRecreation(x, mode='standard') {{
       const original = (x.fullText || x.transcriptPreview || x.title || '').trim();
-      const sentences = splitSentences(original, 12).map(legacySafe);
+      const sentences = splitSentences(original, 12).map(normalizeCurrentSourceText).filter(Boolean);
       const title = x.title || sentences[0] || '爆款短视频二创';
       const topic = deepTopic(x);
-      const hook = sentences[0] || legacySafe(title) || `这条内容最值得看的不是表面信息，而是它给出的判断`;
+      const hook = sentences[0] || normalizeCurrentSourceText(title) || `当前链接最值得看的，是它给出的判断`;
       const action = sentences.find(s=>/评论|收藏|关注|转发|点赞|方法|步骤|试试|记住|建议/.test(s)) || `最后给一个明确动作，让用户知道看完以后该做什么。`;
       const structure = [
         `开头借鉴：先用「${{hook.slice(0, 42)}}」这类强判断/强痛点停住用户。`,
         `中段借鉴：围绕「${{topic}}」保留原视频的信息顺序，但换成新的表达和例子。`,
         `结尾借鉴：把「${{action.slice(0, 42)}}」改成你账号能承接的互动问题。`
       ];
-      const newTitle = legacySafe(`${{topic}}，这条内容换个角度更容易被看完`);
+      const newTitle = removeOldCoreLeak(finalDeepScriptGuard(`${{topic}}，换个角度更容易被看完`, `${{title}} ${{original}}`), {{ source:`${{title}} ${{original}}`, topic }});
       const cover = [safeClip(topic, 10), '这点最关键', '看完再决定'];
-      const script = makeQingdouStyleScript(x, topic, sentences);
+      const generated = makeQingdouStyleScript(x, mode);
       return {{
         title: newTitle,
         cover,
-        script,
+        script: generated.script,
+        agent: generated.agent,
         structure,
         originalHook: hook,
-        note: `${{x.transcriptSource || '提取文案'}}生成智能二创，保留语义和爆点，重新组织表达，不复制原句。`
+        note: `${{x.transcriptSource || '提取文案'}}生成智能二创：只读取当前链接，不调用历史账号主题。`
       }};
     }}
 
@@ -1225,24 +1397,32 @@ cd /Users/a001/Documents/抖音工作流
       const recreation = makeViralRecreation(x);
       const original = x.fullText || x.transcriptPreview || '当前链接未提取到原文案。';
       const key = x.id || 'current';
+      const modeButtons = viralCopyModes.map(mode=>`
+        <button class="qd-mode ${{mode.id === 'standard' ? 'active' : ''}}" data-mode="${{esc(mode.id)}}" onclick="rewriteViralByMode('${{esc(key)}}','${{esc(mode.id)}}')">${{esc(mode.name)}}</button>
+      `).join('');
       return `
         <div class="qd-ai-layout" id="viralAiBlock-${{esc(key)}}">
           <div class="qd-ai-input">
             <div class="qd-tabs"><span class="qd-tab">所有模板</span><span class="qd-tab active">当前模板</span></div>
             <div class="qd-template-title">智能二创</div>
-            <div class="muted">内容要求（必填） · 建议 1500 字以内，超出后结果可能不精准</div>
+            <div class="muted">内容要求（必填） · 当前链接专属智能体 · 不读取历史账号主题</div>
             <div class="qd-textarea">${{esc(original)}}</div>
             <div class="qd-char-row"><span>粘贴 · 清空</span><span>${{Math.min(original.length, 3000)}} / 3000</span></div>
             <button class="primary qd-generate" onclick="rerenderViralAi('${{esc(key)}}')">重新创作</button>
             <div class="qd-output-label">内容由 AI 生成</div>
           </div>
           <div class="qd-ai-output">
+            <div class="qd-agent-bar">
+              <span><b>本次智能体：</b><span id="viralAgentId-${{esc(key)}}">${{esc(recreation.agent?.id || 'copy-agent')}}</span></span>
+              <span id="viralAgentDomain-${{esc(key)}}">${{esc(viralDomainLabel(recreation.agent?.domain))}} · ${{esc(recreation.agent?.mode?.name || '智能二创')}}</span>
+            </div>
+            <div class="qd-output-label">智能润色</div>
+            <div class="qd-mode-row" id="viralModeRow-${{esc(key)}}">${{modeButtons}}</div>
             <div class="qd-output-paper" id="viralAiOutput-${{esc(key)}}">${{esc(recreation.script)}}</div>
             <div class="qd-output-label">内容由 AI 生成</div>
             <div class="qd-output-actions">
               <button class="secondary" onclick="sendViralRecreationToOptimizer('${{esc(x.id || '')}}')">编辑文案</button>
               <button class="secondary" onclick="copyViralRecreation('${{esc(x.id || '')}}')">复制文案</button>
-              <button class="secondary" onclick="polishViralRecreation('${{esc(x.id || '')}}')">智能润色</button>
               <button class="secondary" onclick="archiveViralById('${{esc(x.id || '')}}')">保存归档</button>
               <button class="secondary" disabled title="本地版暂未接入配音服务">AI配音</button>
             </div>
@@ -1294,27 +1474,22 @@ cd /Users/a001/Documents/抖音工作流
     }}
 
     window.rerenderViralAi = function(id='') {{
+      rewriteViralByMode(id, 'standard');
+    }}
+
+    window.rewriteViralByMode = function(id='', mode='standard') {{
       const record = viralRecordById(id);
       if (!record) return;
-      const recreation = makeViralRecreation(record);
+      const recreation = makeViralRecreation(record, mode);
       const key = id || 'current';
       const el = document.getElementById(`viralAiOutput-${{key}}`);
       if (el) el.textContent = recreation.script;
-    }}
-
-    window.polishViralRecreation = function(id='') {{
-      const record = viralRecordById(id);
-      if (!record) return;
-      const recreation = makeViralRecreation(record);
-      const key = id || 'current';
-      const el = document.getElementById(`viralAiOutput-${{key}}`);
-      const base = el?.textContent?.trim() || recreation.script;
-      const polished = finalDeepScriptGuard(base
-        .replace(/你会发现/g, '你很快会发现')
-        .replace(/真正重要的/g, '更关键的是')
-        .replace(/所以/g, '接下来')
-        .replace(/从今天开始/g, '现在就从一个小动作开始'), record.fullText || record.transcriptPreview || record.title || '');
-      if (el) el.textContent = polished;
+      const agentId = document.getElementById(`viralAgentId-${{key}}`);
+      if (agentId) agentId.textContent = recreation.agent?.id || 'copy-agent';
+      const agentDomain = document.getElementById(`viralAgentDomain-${{key}}`);
+      if (agentDomain) agentDomain.textContent = `${{viralDomainLabel(recreation.agent?.domain)}} · ${{recreation.agent?.mode?.name || viralModeById(mode).name}}`;
+      const modeRow = document.getElementById(`viralModeRow-${{key}}`);
+      if (modeRow) modeRow.querySelectorAll('.qd-mode').forEach(btn => btn.classList.toggle('active', btn.dataset.mode === mode));
     }}
 
     window.copyViralRecreation = async function(id='') {{
