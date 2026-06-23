@@ -521,13 +521,13 @@ def render(rows):
             <label class="muted">套用爆款拆解案例</label>
             <select id="ideaViralCase"></select>
             <div style="height:10px"></div>
-            <label class="muted">热点结合</label>
+            <label class="muted">抖音新闻热点</label>
             <select id="ideaHotTopic"><option value="">不结合热点</option></select>
             <div style="height:8px"></div>
-            <input id="ideaHotCustom" placeholder="也可以手动输入热点，例如：AI 新工具 / 高考查分 / 资产波动">
+            <input id="ideaHotCustom" placeholder="也可以手动输入抖音热点，例如：某条热搜词 / 某个新闻事件">
             <div class="toolbar">
-              <button class="secondary" id="refreshHotTopics">刷新热点</button>
-              <span class="muted" id="hotTopicStatus">可结合当前全网热点做借势口播</span>
+              <button class="secondary" id="refreshHotTopics">刷新抖音热搜</button>
+              <span class="muted" id="hotTopicStatus">可结合当前抖音新闻热点做口播</span>
             </div>
             <div style="height:10px"></div>
             <label class="muted">生成数量</label>
@@ -1957,29 +1957,51 @@ cd /Users/a001/Documents/抖音工作流
 
     function selectedIdeaHot() {{
       const manual = ($('#ideaHotCustom')?.value || '').trim();
-      if (manual) return {{ title:manual, source:'手动输入热点', angle:'按手动输入热点做借势切入。' }};
+      if (manual) return {{
+        title: manual,
+        summary: `手动输入的抖音热点：${{manual}}。`,
+        source: '手动输入热点',
+        angle: '按手动输入热点做具体新闻切入。'
+      }};
       const raw = $('#ideaHotTopic')?.value || '';
       if (!raw) return null;
       try {{
         return JSON.parse(raw);
       }} catch {{
-        return {{ title:raw, source:'热点', angle:'结合当前热点做借势切入。' }};
+        return {{ title:raw, summary:`抖音热点：${{raw}}。`, source:'抖音热搜', angle:'结合当前抖音热点做具体切入。' }};
       }}
+    }}
+
+    function hotMetaLine(hot) {{
+      const parts = [];
+      if (hot?.rank) parts.push(`热榜第${{hot.rank}}名`);
+      if (hot?.hotValueText) parts.push(`热度${{hot.hotValueText}}`);
+      else if (hot?.hotValue) parts.push(`热度${{Number(hot.hotValue).toLocaleString('zh-CN')}}`);
+      if (hot?.videoCount) parts.push(`相关视频/讨论${{hot.videoCount}}条`);
+      if (hot?.label) parts.push(`标记${{hot.label}}`);
+      return parts.join(' · ');
+    }}
+
+    function hotSummaryLine(hot) {{
+      return (hot?.summary || hot?.sentence || hot?.angle || '').trim();
     }}
 
     async function loadHotTopics() {{
       const select = $('#ideaHotTopic');
       const status = $('#hotTopicStatus');
       if (!select) return;
-      if (status) status.textContent = '正在刷新热点...';
+      if (status) status.textContent = '正在刷新抖音热搜...';
       try {{
         const res = await fetch(apiUrl(`/api/hot-topics?theme=${{encodeURIComponent(selectedIdeaTheme())}}&pain=${{encodeURIComponent(selectedIdeaPain())}}&t=${{Date.now()}}`), apiOptions({{ cache:'no-store' }}));
         const data = await res.json();
         state.hotTopics = data.topics || [];
-        select.innerHTML = '<option value="">不结合热点</option>' + state.hotTopics.map((x, i)=>`<option value="${{esc(JSON.stringify(x))}}">${{i+1}}. ${{esc(x.title.slice(0,34))}}｜${{esc(x.source || '热点')}}</option>`).join('');
-        if (status) status.textContent = data.sourceNote || `已刷新 ${{state.hotTopics.length}} 条热点`;
+        select.innerHTML = '<option value="">不结合热点</option>' + state.hotTopics.map((x, i)=>{{
+          const meta = hotMetaLine(x);
+          return `<option value="${{esc(JSON.stringify(x))}}">${{i+1}}. ${{esc(x.title.slice(0,34))}}｜${{esc(meta || x.source || '抖音热搜')}}</option>`;
+        }}).join('');
+        if (status) status.textContent = data.sourceNote || `已刷新 ${{state.hotTopics.length}} 条抖音热搜`;
       }} catch (err) {{
-        if (status) status.textContent = '热点刷新失败，可手动输入热点继续生成';
+        if (status) status.textContent = '抖音热搜刷新失败，可手动输入热点继续生成';
       }}
     }}
 
@@ -2175,18 +2197,18 @@ cd /Users/a001/Documents/抖音工作流
     window.loadVideoToOptimizer = loadVideoToOptimizer;
 
     const topicTemplates = [
-      '为什么{{pain}}的人，最容易把自己活丢',
-      '{{pain}}不是你的错，但继续这样就是消耗',
-      '真正清醒的人，会先戒掉{{pain}}',
-      '你以为你在{{pain}}，其实你是在保护害怕',
-      '如果你正在{{pain}}，请先做这 3 件事',
-      '别再美化{{pain}}，那不是善良',
-      '{{theme}}里最该听懂的一句话',
-      '一个人开始变好的标志：不再{{pain}}',
-      '你不是太敏感，你只是太久没有站回自己',
-      '把自己活回来，从停止{{pain}}开始',
-      '别等别人允许你，你本来就可以',
-      '这不是鸡汤，这是你该拿回的人生主动权'
+      '{{theme}}里最容易被忽略的问题：{{pain}}',
+      '为什么你明明关注{{theme}}，却一直卡在{{pain}}',
+      '{{pain}}的人，先别急着找答案',
+      '把{{theme}}做出结果，先拆清这 3 个误区',
+      '如果你正在{{pain}}，这条内容给你一个具体做法',
+      '{{theme}}不是知道就行，关键是怎么开始行动',
+      '普通人做{{theme}}，最该先补上的一步',
+      '{{pain}}背后，其实少了一个可执行流程',
+      '用一个真实场景讲清楚{{theme}}',
+      '{{theme}}从想法到结果，中间差的不是热情',
+      '别只看结论，{{theme}}真正有用的是这套判断',
+      '今天把{{pain}}变成一个可执行动作'
     ];
 
     const careerTopicTemplates = [
@@ -2352,6 +2374,8 @@ cd /Users/a001/Documents/抖音工作流
       const careerMode = isCareerTheme(theme, pain);
       const hot = idea.hot || selectedIdeaHot();
       const hotTitle = hot?.title || '';
+      const hotSummary = hotSummaryLine(hot);
+      const hotMeta = hotMetaLine(hot);
       const plan = ideaVariantPlan(`${{clean}} ${{hotTitle}}`, theme, pain, Number(idea.variant || 0));
       const baseOpening = hookLine(formula, clean, theme, pain);
       const openingLead = /[。！？.!?]$/.test(baseOpening.trim()) ? baseOpening.trim() : `${{baseOpening.trim()}}。`;
@@ -2359,7 +2383,14 @@ cd /Users/a001/Documents/抖音工作流
         ? `${{openingLead}}今天这条内容只讲一个切口：「${{clean}}」。不要泛泛聊涨粉，也不要泛泛聊工具，要把用户为什么不信你这件事讲具体。`
         : `${{openingLead}}今天这条内容只围绕「${{clean}}」展开，用一个具体场景、一个误区和一个动作讲清楚。`;
       const hotLine = hotTitle
-        ? `这两天大家都在关注「${{hotTitle}}」。我不展开判断新闻本身，只借这个热点说一个普通人做内容一定要看懂的规律：热点真正有用的地方，不是拿来硬蹭，而是拿来把用户已经关心的事，转成你能提供的价值。`
+        ? [
+            `先借一个抖音正在热议的新闻热点开场：「${{hotTitle}}」。${{hotMeta ? `它现在是${{hotMeta}}。` : ''}}`,
+            hotSummary ? `这个热点的公开信息点是：${{hotSummary}}` : `这个热点至少说明一件事：用户现在正在主动搜索和讨论「${{hotTitle}}」。`,
+            `这条口播不要只蹭热度，而是把这个热点里的公众注意力，接到「${{themeName}}」这个方向里最具体的痛点：${{pain}}。`
+          ].join('')
+        : '';
+      const hotBridge = hotTitle
+        ? `所以这条内容的角度可以这样落：用户不是为了看一个热搜标题停下来的，而是因为这个新闻点背后有一个和自己有关的问题。我们要把「${{hotTitle}}」转成「${{clean}}」的入口，让用户听完知道自己下一步该怎么做。`
         : '';
       const titles = careerMode
         ? [
@@ -2395,6 +2426,7 @@ cd /Users/a001/Documents/抖音工作流
         ? [
             viralLine,
             hotLine,
+            hotBridge,
             `你有没有发现，很多人想做${{themeName}}，一上来就问：我该发什么、怎么涨粉、怎么变现。听起来很努力，但用户不会因为你努力就相信你。用户只会在几秒钟里判断一件事：这个人到底懂不懂我，能不能帮我解决问题。`,
             `所以这条内容不要泛泛讲${{themeName}}，要把问题压到一个具体切口：${{clean}}。用户真正卡住的不是不知道要努力，而是${{pain}}。`,
             `你可以先给他一个非常具体的画面：${{plan.scene}}。这句话一出来，用户会觉得：对，我就是这样，我不是不想做，是我不知道该怎么让别人相信我。`,
@@ -2402,12 +2434,13 @@ cd /Users/a001/Documents/抖音工作流
             `什么叫信任链路？就是用户看完以后，能立刻知道三件事：第一，你帮谁；第二，你解决什么问题；第三，为什么这件事可以相信你。如果这三件事不清楚，发再多内容，也只是在热闹里消耗自己。`,
             `那这条视频可以直接给用户三个动作。第一，${{plan.method[0]}}。这一步是为了让用户一眼知道你的位置。第二，${{plan.method[1]}}。这一步是为了让你的内容不是散的，而是能连续建立印象。第三，${{plan.method[2]}}。这一步是为了让用户看完以后知道下一步该做什么。`,
             `这里你可以补一个更具体的例子：${{plan.proof}}。不要讲得太大，就拿一个真实业务场景说清楚：一个人从不信你，到愿意继续看你，中间到底发生了什么。`,
-            `最后记住，热点只是入口，信任才是结果。你借热点，是为了让用户停下来；你讲方法，是为了让用户留下来；你给行动，是为了让用户愿意和你发生下一步关系。`,
+            hotTitle ? `最后记住，抖音热点不是正文的替代品，它只是开场的注意力入口。你引用「${{hotTitle}}」，是为了让用户立刻明白这件事和自己有关；你讲「${{clean}}」，是为了把注意力变成信任；你给动作，是为了让用户看完以后愿意继续跟你走。` : `最后记住，入口只是入口，信任才是结果。你讲方法，是为了让用户留下来；你给行动，是为了让用户愿意和你发生下一步关系。`,
             `如果你现在也在做账号，先别急着再发一条作品。先回答我一个问题：${{plan.interaction}}`
           ].filter(Boolean).join('\\n\\n')
         : [
             viralLine,
             hotLine,
+            hotBridge,
             `你有没有发现，很多内容听起来很对，但用户听完只是点点头，然后就划走了。原因不是观点不够狠，而是它没有把用户带进一个具体场景里。`,
             `所以这条选题的重点不是重复一句观点，而是用「${{plan.angle}}」把「${{clean}}」讲具体。用户会停下来，是因为他正在经历：${{plan.scene}}。`,
             `中段先拆误区：${{plan.mistake}}。不要急着给结论，先让用户意识到自己为什么一直卡在${{pain}}。只有他先看见问题，后面的方法才会有重量。`,
@@ -2423,10 +2456,14 @@ cd /Users/a001/Documents/抖音工作流
       if (!item) return;
       $$('.idea-card').forEach((card, i)=>card.classList.toggle('active', i === index));
       const pack = topicPackage(item);
+      const packHotMeta = hotMetaLine(pack.hot);
+      const packHotSummary = hotSummaryLine(pack.hot);
       const copyText = [
         '【选题】' + pack.title,
         '',
-        pack.hot ? `【热点借势】${{pack.hot.title}}（${{pack.hot.source || '热点'}}）` : '',
+        pack.hot ? `【抖音新闻热点】${{pack.hot.title}}（${{pack.hot.source || '抖音热搜'}}）` : '',
+        pack.hot && packHotMeta ? `热搜数据：${{packHotMeta}}` : '',
+        pack.hot && packHotSummary ? `热点信息：${{packHotSummary}}` : '',
         pack.hot ? '' : '',
         '【标题】',
         ...pack.titles.map((t,i)=>`${{i+1}}. ${{t}}`),
@@ -2445,7 +2482,7 @@ cd /Users/a001/Documents/抖音工作流
           <span class="chip">${{esc(pack.pain)}}</span>
         </div>
         <div class="result"><b>自动套用钩子：</b>${{esc(pack.formula.name)}}<br><span class="muted">${{esc(pack.formula.pattern)}}</span></div>
-        ${{pack.hot ? `<div class="result"><b>结合热点：</b>${{esc(pack.hot.title)}}<br><span class="muted">${{esc(pack.hot.source || '热点')}} · ${{esc(pack.hot.angle || '作为借势口播入口')}}</span></div>` : ''}}
+        ${{pack.hot ? `<div class="result"><b>结合抖音热点：</b>${{esc(pack.hot.title)}}<br><span class="muted">${{esc(pack.hot.source || '抖音热搜')}}${{packHotMeta ? ' · ' + esc(packHotMeta) : ''}}</span>${{packHotSummary ? `<div class="muted" style="margin-top:6px">${{esc(packHotSummary)}}</div>` : ''}}</div>` : ''}}
         ${{pack.viralCase ? `<div class="result"><b>套用爆款案例：</b>${{esc(pack.viralCase.title)}}<br><span class="muted">${{esc(pack.viralCase.source)}} · 爆款潜力 ${{pack.viralCase.avg}}</span></div>` : ''}}
         ${{renderDanaoReference('选题生成器', 3)}}
         <div class="result"><b>标题方案：</b><br>${{pack.titles.map((t,i)=>`${{i+1}}. ${{esc(t)}}`).join('<br>')}}</div>
@@ -2494,7 +2531,7 @@ cd /Users/a001/Documents/抖音工作流
           ? ['｜爆款同构','｜外部案例复刻','｜高互动结构','｜封面反差','｜评论区入口']
           : careerMode
             ? ['｜个人品牌','｜信任资产','｜内容定位','｜AI超级个体','｜成交路径']
-            : ['｜清醒局','｜女性成长','｜关系边界','｜内核稳定','｜行动力'];
+            : ['｜热点切入','｜实操方法','｜案例拆解','｜避坑清单','｜行动方案'];
         const suffix = suffixPool[i % suffixPool.length];
         const topic = `${{i+1}}. ${{base}}${{suffix}}`;
         const plan = ideaVariantPlan(`${{cleanTopic(topic)}} ${{hot?.title || ''}}`, theme, pain, i);

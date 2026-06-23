@@ -196,7 +196,14 @@ def cover_examples(theme):
     }
 
 
-def decode_hot_word(raw):
+DOUYIN_HOT_SEARCH_URLS = [
+    "https://aweme.snssdk.com/aweme/v1/hot/search/list/?aid=1128&version_code=130200&device_platform=android",
+    "https://aweme-hl.snssdk.com/aweme/v1/hot/search/list/?aid=1128&version_code=130200&device_platform=android",
+    "https://aweme-lq.snssdk.com/aweme/v1/hot/search/list/?aid=1128&version_code=130200&device_platform=android",
+]
+
+
+def clean_hot_text(raw):
     text = unescape(str(raw or "")).strip()
     try:
         text = json.loads(f'"{text}"')
@@ -205,55 +212,158 @@ def decode_hot_word(raw):
     return re.sub(r"\s+", " ", text).strip()
 
 
-def fetch_baidu_hot_topics(limit=20):
-    url = "https://top.baidu.com/board?tab=realtime"
-    req = Request(
-        url,
-        headers={
-            "User-Agent": "Mozilla/5.0",
-            "Accept": "text/html,application/xhtml+xml",
-            "Referer": "https://www.baidu.com/",
-        },
+def compact_hot_value(raw):
+    try:
+        value = int(float(raw))
+    except Exception:
+        return ""
+    if value >= 100000000:
+        return f"{value / 100000000:.1f}亿"
+    if value >= 10000:
+        return f"{value / 10000:.1f}万"
+    return str(value)
+
+
+def douyin_label_name(label):
+    labels = {
+        0: "热",
+        1: "热",
+        2: "新",
+        3: "爆",
+        4: "荐",
+        5: "沸",
+    }
+    try:
+        return labels.get(int(label), "")
+    except Exception:
+        return ""
+
+
+def douyin_hot_lists(payload):
+    data = payload.get("data") if isinstance(payload, dict) else None
+    candidates = []
+    if isinstance(data, dict):
+        candidates.extend(data.get(key) for key in ("word_list", "trending_list", "recommend_list"))
+    if isinstance(payload, dict):
+        candidates.extend(payload.get(key) for key in ("word_list", "hot_search_list", "list"))
+    return [item for group in candidates if isinstance(group, list) for item in group if isinstance(item, dict)]
+
+
+def normalize_douyin_hot_item(item, idx):
+    title = clean_hot_text(
+        item.get("word")
+        or item.get("sentence")
+        or item.get("hot_word")
+        or item.get("query")
+        or item.get("title")
     )
-    with urlopen(req, timeout=12) as resp:
-        html = resp.read().decode("utf-8", "ignore")
-    raw_words = re.findall(r'"word":"(.*?)"', html)
-    topics = []
-    seen = set()
-    for raw in raw_words:
-        title = decode_hot_word(raw)
-        if not title or title in seen:
-            continue
-        seen.add(title)
-        topics.append(
-            {
-                "title": title,
-                "source": "百度热榜",
-                "sourceUrl": url,
-                "angle": "热点借势：只借公众正在关注的讨论入口，不编造新闻细节。",
-            }
+    if not title:
+        return None
+    rank = item.get("position") or item.get("rank") or idx
+    hot_value = item.get("hot_value") or item.get("hotValue") or item.get("view_count") or item.get("score")
+    hot_value_text = compact_hot_value(hot_value)
+    video_count = item.get("video_count") or item.get("discuss_video_count") or item.get("aweme_count") or ""
+    label = douyin_label_name(item.get("label") or item.get("word_type"))
+    cover = ""
+    cover_info = item.get("word_cover") or item.get("cover") or {}
+    if isinstance(cover_info, dict):
+        cover_list = cover_info.get("url_list") or cover_info.get("urls") or []
+        if cover_list:
+            cover = cover_list[0]
+    detail_parts = [f"抖音热榜第{rank}名"]
+    if hot_value_text:
+        detail_parts.append(f"热度{hot_value_text}")
+    if video_count:
+        detail_parts.append(f"相关视频/讨论约{video_count}条")
+    if label:
+        detail_parts.append(f"榜单标记「{label}」")
+    summary = f"热搜词「{title}」；" + "，".join(detail_parts) + "。"
+    return {
+        "title": title,
+        "summary": summary,
+        "source": "抖音热搜",
+        "sourceUrl": f"https://www.douyin.com/search/{quote(title)}",
+        "rank": rank,
+        "hotValue": hot_value or "",
+        "hotValueText": hot_value_text,
+        "videoCount": video_count,
+        "label": label,
+        "cover": cover,
+        "angle": f"把抖音正在集中搜索的「{title}」转成用户当下关心的问题入口，再接到你的选题方向和痛点。",
+    }
+
+
+def fetch_douyin_hot_topics(limit=24):
+    last_error = None
+    for url in DOUYIN_HOT_SEARCH_URLS:
+        req = Request(
+            url,
+            headers={
+                "User-Agent": "okhttp3",
+                "Accept": "application/json,text/plain,*/*",
+                "Referer": "https://www.douyin.com/",
+            },
         )
-        if len(topics) >= limit:
-            break
-    return topics
+        try:
+            with urlopen(req, timeout=12) as resp:
+                data = json.loads(resp.read().decode("utf-8", "ignore"))
+        except Exception as exc:
+            last_error = exc
+            continue
+        topics = []
+        seen = set()
+        for idx, item in enumerate(douyin_hot_lists(data), 1):
+            topic = normalize_douyin_hot_item(item, idx)
+            if not topic or topic["title"] in seen:
+                continue
+            seen.add(topic["title"])
+            topics.append(topic)
+            if len(topics) >= limit:
+                break
+        if topics:
+            return topics
+    if last_error:
+        raise last_error
+    return []
+
+
+def fallback_douyin_hot_topics():
+    fallback = [
+        ("AI 工具进入日常办公", "抖音热点兜底", "用 AI 办公、智能体和效率工具做具体案例切入。"),
+        ("高考查分与选择焦虑", "抖音热点兜底", "用升学选择、分数线和家庭决策讲规划与行动。"),
+        ("普通人做个人品牌", "抖音热点兜底", "用个人品牌、信任内容和成交路径讲清楚普通人如何被看见。"),
+        ("极端天气与生活规划", "抖音热点兜底", "用突发变化讲风险意识、提前准备和确定感。"),
+        ("暑期出行与消费选择", "抖音热点兜底", "用出行、消费和避坑场景切入实际决策方法。"),
+    ]
+    return [
+        {
+            "title": title,
+            "summary": summary,
+            "source": source,
+            "sourceUrl": "",
+            "rank": idx,
+            "hotValue": "",
+            "hotValueText": "",
+            "videoCount": "",
+            "label": "",
+            "cover": "",
+            "angle": f"把「{title}」作为抖音热点方向入口，连接用户正在关心的现实问题。",
+        }
+        for idx, (title, source, summary) in enumerate(fallback, 1)
+    ]
 
 
 def hot_topics(theme="", pain=""):
     try:
-        topics = fetch_baidu_hot_topics(24)
+        topics = fetch_douyin_hot_topics(24)
+        source_note = "已读取抖音实时热搜；生成口播会引用热搜标题、排名、热度和讨论数据，再结合当前主题方向与用户痛点。"
     except Exception:
-        topics = []
-    fallback = [
-        {"title": "AI 工具进入日常办公", "source": "本地热点兜底", "sourceUrl": "", "angle": "把 AI 热点转成个人效率和内容生产力。"},
-        {"title": "普通人做个人品牌", "source": "本地热点兜底", "sourceUrl": "", "angle": "把信任、内容资产和成交路径讲清楚。"},
-        {"title": "高考查分与选择焦虑", "source": "本地热点兜底", "sourceUrl": "", "angle": "借选择节点讲决策、规划和行动。"},
-        {"title": "全球资产波动", "source": "本地热点兜底", "sourceUrl": "", "angle": "借不确定性讲长期主义和确定感。"},
-        {"title": "极端天气与生活规划", "source": "本地热点兜底", "sourceUrl": "", "angle": "借突发变化讲风险意识和提前准备。"},
-    ]
+        topics = fallback_douyin_hot_topics()
+        source_note = "抖音热搜读取失败，暂用本地抖音热点方向兜底；可点刷新或手动输入热点继续生成。"
     return {
         "updatedAt": time.strftime("%Y-%m-%d %H:%M:%S"),
-        "sourceNote": "优先读取百度实时热榜；网络不可用时提供本地热点方向。生成时只做借势类比，不编造新闻事实。",
-        "topics": (topics or fallback)[:24],
+        "sourceNote": source_note,
+        "topics": topics[:24],
     }
 
 
