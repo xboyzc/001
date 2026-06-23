@@ -802,6 +802,14 @@ def refresh_snapshot():
         return dict(REFRESH_STATE, logs=list(REFRESH_STATE.get("logs", [])))
 
 
+def load_app_capture_state():
+    path = ROOT / "data" / "douyin_app_capture_state.json"
+    try:
+        return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    except Exception:
+        return {}
+
+
 def run_step(name, command):
     set_refresh_state(step=name, message=f"正在{name}...")
     append_refresh_log(f"$ {' '.join(command)}")
@@ -860,11 +868,22 @@ def refresh_workflow(source_url=""):
             ]
         for name, command in steps:
             run_step(name, command)
+        app_state = load_app_capture_state() if not source_url else {}
+        fallback_count = app_state.get("capturedCount")
+        used_fallback = bool(app_state.get("fallback"))
         set_refresh_state(
             running=False,
             ok=True,
             step="刷新完成",
-            message="已按主页链接抓取目标博主作品并重建工作台，页面即将刷新。" if source_url else "已抓取抖音作品信息并重建工作台；平台限制导致的原视频下载失败会自动跳过，不影响作品数据更新。",
+            message=(
+                "已按主页链接抓取目标博主作品并重建工作台，页面即将刷新。"
+                if source_url
+                else (
+                    f"当前抖音 App 页面未读到作品，已沿用上一次成功抓取的 {fallback_count or ''} 条作品继续刷新并重建工作台。"
+                    if used_fallback
+                    else "已抓取抖音作品信息并重建工作台；平台限制导致的原视频下载失败会自动跳过，不影响作品数据更新。"
+                )
+            ),
             finishedAt=time.strftime("%Y-%m-%d %H:%M:%S"),
         )
     except Exception as exc:

@@ -2171,61 +2171,201 @@ cd /Users/a001/Documents/抖音工作流
       return String(topic || '').replace(/^\\d+[.、]\\s*/, '').replace(/｜.*/, '').trim();
     }}
 
-    function topicPackage(topic, theme, pain) {{
-      const clean = cleanTopic(topic);
+    function ideaSeed(text) {{
+      return Math.abs(String(text || '').split('').reduce((n, ch)=>((n * 31) + ch.charCodeAt(0)) | 0, 7));
+    }}
+
+    function pickSeed(list, seed, offset=0) {{
+      return list[(seed + offset) % list.length];
+    }}
+
+    function ideaDomain(theme, pain, topic) {{
+      const hay = `${{theme}} ${{pain}} ${{topic}}`;
+      if (isCareerTheme(theme, hay)) return 'content_business';
+      return detectViralDomain(hay);
+    }}
+
+    function ideaVariantPlan(clean, theme, pain, variant=0) {{
+      const domain = ideaDomain(theme, pain, clean);
+      const seed = ideaSeed(`${{clean}}|${{theme}}|${{pain}}|${{variant}}`);
+      const plans = {{
+        content_business: {{
+          angles:['信任资产','内容定位','案例证明','成交路径','主页承接','AI 协作'],
+          scenes:[
+            `用户刷到你时，第一反应不是买不买，而是先判断你到底懂不懂他的问题`,
+            `你每天都在发内容，但主页、标题和结尾没有形成同一个信任闭环`,
+            `用户看完觉得有道理，却不知道下一步该找你做什么`,
+            `你有能力、有经验，但内容里缺少能被截图、收藏和转发的确定感`
+          ],
+          mistakes:['只追热点，不解释你解决什么问题','把内容当日记发，没有给用户选择你的理由','标题讲自己很努力，正文没有证明你可信','把涨粉当目标，却忽略了成交前的信任铺垫'],
+          methods:[
+            ['写清楚你帮谁解决什么问题','用一个真实场景证明你理解用户','结尾给一个可评论的下一步问题'],
+            ['把主页置顶改成身份说明','连续发三条误区/方法/案例内容','用同一句价值主张贯穿标题和封面'],
+            ['先讲用户最卡的场景','再给一个可执行步骤','最后用案例证明这个步骤有效'],
+            ['把经验拆成清单','把清单变成栏目','把栏目沉淀成用户一眼能懂的服务入口']
+          ],
+          proof:['拆一个客户常问的问题','拿你过去做成的一件小结果举例','用一个失败内容和一个有效内容做对比','展示从问题到方案的完整思考过程'],
+          interactions:['你现在做账号最卡的是定位、内容还是信任？','如果你要做个人品牌，你最想先解决哪一步？','评论区留一个你的行业，我帮你拆第一条信任内容。','你觉得用户不信你的原因，是看不懂价值，还是看不到证据？'],
+          cover:['先建立信任','别急着发作品','把能力做成资产']
+        }},
+        ai_tool: {{
+          angles:['工具落地','任务拆解','效率提升','工作流搭建','智能体应用','真实场景'],
+          scenes:[
+            `很多人收藏了一堆 AI 工具，但真正打开时还是不知道第一句话该怎么说`,
+            `你想让 AI 帮你干活，却没有把目标、材料和标准交代清楚`,
+            `同一个工具，有人做出结果，有人只得到一堆看起来正确的废话`,
+            `问题不是工具不够强，而是你还没把任务拆到 AI 能执行`
+          ],
+          mistakes:['把 AI 当搜索框用','只问一句大问题，不给背景和标准','收藏工具清单，却不拿真实任务验证','想做万能智能体，结果每件事都做不深'],
+          methods:[
+            ['先写清楚最终结果','再给 AI 角色、背景和限制','最后让它输出可检查的版本'],
+            ['选一个真实任务','拆成三步流程','每一步都保存可复用提示词'],
+            ['先喂资料','再让 AI 生成方案','最后用真实业务标准校验'],
+            ['一个场景做一个智能体','一个智能体只干一类任务','跑通后再复制到下一个场景']
+          ],
+          proof:['用一个你每天重复做的任务演示','拿 AI 前后两版结果做对比','展示提示词从粗到细的变化','拆一个从输入到输出的完整工作流'],
+          interactions:['你最想先用 AI 解决哪件重复工作？','评论区留一个任务，我帮你拆成 AI 工作流。','你卡在工具选择，还是卡在提示词？','如果只能先做一个智能体，你会让它干什么？'],
+          cover:['AI别只收藏','先跑通一个任务','工具要落地']
+        }},
+        learning: {{
+          angles:['最小练习','反馈闭环','知识输出','方法筛选','持续训练','复盘改进'],
+          scenes:[
+            `你听懂了很多方法，但第二天回到自己身上还是不知道先做哪一步`,
+            `你一直在找更好的资料，却很少把一个知识点真正练到手上`,
+            `收藏让你感觉自己在进步，但输出才会暴露你到底会不会`,
+            `你不是学得少，而是没有把学习变成可反馈的动作`
+          ],
+          mistakes:['把收藏当学习','只看方法不做练习','追求一次学完，反而迟迟不开始','没有记录反馈，所以每次都像从零开始'],
+          methods:[
+            ['选一个最关键的问题','用自己的话讲一遍','当天做一次最小练习'],
+            ['把知识点改成一道题','做完马上对照结果','记录下一次要改什么'],
+            ['只学一条方法','用一个真实场景验证','把反馈写成下一条内容'],
+            ['先输出半成品','再补缺口','最后形成自己的模板']
+          ],
+          proof:['展示一次练习前后的变化','用一个失败例子说明误区','把复杂方法拆成一张清单','记录 7 天连续练习的反馈'],
+          interactions:['你现在最想学会的能力是什么？','你卡在开始、坚持，还是复盘？','评论区留一个目标，我帮你拆最小练习。','你收藏最多但一直没做的是什么？'],
+          cover:['别只收藏','先做一次小练习','学习要闭环']
+        }},
+        product_service: {{
+          angles:['真实需求','使用场景','避坑判断','长期成本','选择标准','体验对比'],
+          scenes:[
+            `很多选择一开始看着很心动，真正用起来才发现不适合自己的场景`,
+            `你以为自己在比价格，其实是在比长期使用成本和真实体验`,
+            `卖点写得越热闹，用户越需要一个简单的判断标准`,
+            `用户不是不想买，而是不确定这个选择到底适不适合自己`
+          ],
+          mistakes:['只看表面卖点','被低价或颜值带着走','没有把选择放进真实场景','忽略长期维护和使用成本'],
+          methods:[
+            ['写下三个真实使用场景','把每个方案放进去比较','只选长期会用到的价值'],
+            ['先判断必要需求','再看加分功能','最后算长期成本'],
+            ['列出不能接受的坑','对照产品细节检查','保留一个备选方案'],
+            ['先问谁会用','再问用多久','最后问坏了怎么办']
+          ],
+          proof:['做一次真实场景对比','展示一个容易忽略的细节','用用户真实问题反推选择标准','把买前买后的体验差异讲清楚'],
+          interactions:['你做选择时最容易踩哪个坑？','评论区留你的场景，我帮你判断该怎么看。','你更在意价格、效果还是长期省心？','这类产品你最怕买错哪一点？'],
+          cover:['别只看卖点','先看真实场景','这样选不后悔']
+        }},
+        general: {{
+          angles:['误区纠偏','具体场景','三步行动','反差判断','自我检查','连续练习'],
+          scenes:[
+            `很多人一开始以为问题在外面，真正复盘时才发现卡点其实很具体`,
+            `你不是没有想过改变，而是每次都停在知道，没有进入行动`,
+            `用户刷到这类内容时，最想听的不是大道理，而是一句能对上处境的话`,
+            `表面看是一个观点，真正能打动人的，是它能不能给出下一步`
+          ],
+          mistakes:['只讲观点，不给场景','只说应该改变，不说怎么开始','把复杂问题讲成一句口号','没有让用户知道今天能做什么'],
+          methods:[
+            ['先把问题说具体','再指出一个误区','最后给一个今天能做的小动作'],
+            ['用一个真实画面开场','中段给判断','结尾设计评论问题'],
+            ['先承认用户的卡点','再给一个新解释','最后让他完成一次小练习'],
+            ['把抽象观点换成例子','把例子换成步骤','把步骤换成行动提醒']
+          ],
+          proof:['换一个具体生活/工作场景讲','用前后对比说明变化','拆一个用户常见误会','把结论落到一个当天能做的动作'],
+          interactions:['你现在最卡的是哪一步？','评论区留一个具体场景，我下一条继续拆。','你觉得这件事最难的是开始，还是坚持？','如果只做一个小动作，你会先做哪一个？'],
+          cover:['先抓关键点','别停在知道','今天先做一步']
+        }}
+      }};
+      const config = plans[domain] || plans.general;
+      const method = pickSeed(config.methods, seed, 3);
+      return {{
+        domain,
+        angle: pickSeed(config.angles, seed, 0),
+        scene: pickSeed(config.scenes, seed, 1),
+        mistake: pickSeed(config.mistakes, seed, 2),
+        method,
+        proof: pickSeed(config.proof, seed, 4),
+        interaction: pickSeed(config.interactions, seed, 5),
+        cover: config.cover,
+        seed
+      }};
+    }}
+
+    function topicPackage(topicOrIdea, theme, pain) {{
+      const idea = typeof topicOrIdea === 'object' ? topicOrIdea : {{ topic:topicOrIdea, theme, pain, variant:0 }};
+      const rawTopic = String(idea.topic || '');
+      const baseClean = cleanTopic(rawTopic);
+      const suffixLabel = rawTopic.includes('｜') ? rawTopic.split('｜').slice(1).join('｜').trim() : '';
+      const clean = suffixLabel ? `${{baseClean}}（${{suffixLabel}}）` : baseClean;
+      theme = idea.theme || theme || selectedIdeaTheme();
+      pain = idea.pain || pain || selectedIdeaPain();
       const themeName = theme.split('/')[0] || theme;
       const painCore = pain.replace('的人', '').replace('导致', '').replace('却', '，却');
       const formula = hookById($('#ideaHook')?.value || currentHookId());
       const viralCase = currentViralArchive();
-      const opening = hookLine(formula, clean, theme, pain);
       const careerMode = isCareerTheme(theme, pain);
+      const plan = ideaVariantPlan(clean, theme, pain, Number(idea.variant || 0));
+      const baseOpening = hookLine(formula, clean, theme, pain);
+      const openingLead = /[。！？.!?]$/.test(baseOpening.trim()) ? baseOpening.trim() : `${{baseOpening.trim()}}。`;
+      const opening = careerMode
+        ? `${{openingLead}}今天这条内容只讲一个切口：「${{clean}}」。不要泛泛聊涨粉，也不要泛泛聊工具，要把用户为什么不信你这件事讲具体。`
+        : `${{openingLead}}今天这条内容只围绕「${{clean}}」展开，用一个具体场景、一个误区和一个动作讲清楚。`;
       const titles = careerMode
         ? [
             clean,
-            `${{themeName}}做不起来，不是你不努力，是信任资产没搭好`,
-            `普通人做${{themeName}}，先把这 3 个问题讲清楚`,
-            `别再乱发作品了，先让用户知道为什么该信你`
+            `${{clean}}：先从${{plan.angle}}讲起`,
+            `普通人做${{themeName}}，先把「${{plan.method[0]}}」讲清楚`,
+            `${{themeName}}做不起来，可能卡在${{plan.mistake}}`
           ]
         : [
             clean,
-            `${{painCore}}，真正该改的不是你`,
-            `${{themeName}}：你不是不够好，是太久没站回自己`,
-            `别再用${{painCore}}证明你值得被爱`
+            `${{clean}}：换成${{plan.angle}}会更好讲`,
+            `${{painCore}}，先别急着下结论`,
+            `${{themeName}}里最该讲清楚的，是这一步`
           ];
       if (viralCase) {{
         titles.splice(1, 0, `${{clean}}｜照着爆款结构讲透`);
       }}
       const cover = viralCase?.cover?.length
-        ? viralCase.cover
+        ? [safeClip(clean, 10), safeClip(viralCase.cover[1] || plan.cover[1], 10), safeClip(plan.angle, 10)]
         : careerMode
-        ? ['先别急着发作品', '先建立信任资产', themeName]
+        ? [safeClip(plan.cover[0], 10), safeClip(plan.cover[1], 10), safeClip(themeName, 10)]
         : theme.includes('追星')
-        ? ['你追的不是他', '是你想成为的自己', '追星心理']
+        ? [safeClip(clean, 10), safeClip(plan.angle, 10), '追自己']
         : theme.includes('边界') || theme.includes('讨好')
-          ? ['别再讨好', '你越懂事越被亏待', '边界感']
+          ? [safeClip(clean, 10), safeClip(plan.angle, 10), '边界感']
           : theme.includes('情绪')
-            ? ['你不是太敏感', '是边界太久没被看见', '内核稳定']
-            : ['把自己活回来', '从停止内耗开始', themeName];
+            ? [safeClip(clean, 10), safeClip(plan.angle, 10), '稳定感']
+            : [safeClip(clean, 10), safeClip(plan.cover[1], 10), safeClip(plan.angle, 10)];
+      const viralLine = viralCase
+        ? `这条选题可以借用归档爆款的节奏，但切入点必须放在「${{clean}}」自己的角度：${{plan.angle}}。爆款只提供结构参考，不复用原句。`
+        : opening;
       const script = careerMode
         ? [
-            viralCase ? `先照着这条爆款的结构开场：${{viralCase.elements?.[0] || viralCase.title}}` : opening,
-            `你有没有发现，很多人想做${{themeName}}，一上来就问：我该发什么、怎么涨粉、怎么变现。`,
-            `但真正的问题往往不是你没有选题，而是${{pain}}。用户不认识你，也不知道你能帮他解决什么，所以他看完就划走。`,
-            viralCase ? `这条内容可以借用它的爆点：${{(viralCase.elements || []).slice(0,3).join('；')}}。不要照搬原话，要照搬它的“先点问题、再翻误区、最后给动作”的节奏。` : '',
-            `做${{themeName}}，最先搭的不是流量，而是信任。信任来自三件事：你能准确说出用户的问题，你能给出清晰的方法，你能持续证明自己不是随便说说。`,
-            `所以这条视频可以给用户三个动作。第一，用一句话写清楚你帮谁解决什么问题。第二，连续发三条内容：一条讲误区，一条讲方法，一条讲案例。第三，把主页置顶改成“我是谁、我帮谁、怎么帮”。`,
-            `AI 不是替你凭空变强，而是把你已经有的经验、判断和方法放大。你越清楚自己的定位，AI 越能帮你把内容规模化。`,
-            `如果你也想把自己的能力做成一个可持续的个人品牌，评论区留一句“我要做资产”，我下一条继续拆具体步骤。`
+            viralLine,
+            `这条内容不要泛泛讲${{themeName}}，要把问题压到一个具体切口：${{clean}}。用户真正卡住的不是不知道要努力，而是${{pain}}。`,
+            `开头先给一个画面：${{plan.scene}}。这个画面一出来，用户才会觉得你说的不是空话，而是他正在遇到的事。`,
+            `接着翻一个误区：${{plan.mistake}}。你要告诉他，问题不是“再多发几条就好了”，而是要先把信任、价值和下一步讲清楚。`,
+            `方法段直接给三步。第一，${{plan.method[0]}}。第二，${{plan.method[1]}}。第三，${{plan.method[2]}}。这三步要围绕「${{clean}}」展开，不要跑回泛泛的涨粉焦虑。`,
+            `为了让这条和其他选题明显不同，案例部分就放在：${{plan.proof}}。这里最好讲一个真实业务场景，让用户看见你怎么判断。`,
+            `最后收束到一个明确动作：${{plan.interaction}}`
           ].filter(Boolean).join('\\n\\n')
         : [
-            viralCase ? `先照着这条爆款的结构开场：${{viralCase.elements?.[0] || viralCase.title}}` : opening,
-            `你有没有发现，${{pain}}的时候，最累的不是事情本身，而是你明明很委屈，还要假装自己没关系。`,
-            `很多人会以为，这是自己太敏感、太矫情、太不懂事。但真正的问题不是你感受太多，而是你太习惯把别人的反应放在自己前面。`,
-            viralCase ? `这条内容可以借用它的爆点：${{(viralCase.elements || []).slice(0,3).join('；')}}。不要照搬原话，要照搬它的“先扎痛点、再翻误区、最后给动作”的节奏。` : '',
-            `你越想证明自己值得被喜欢，就越容易把选择权交出去。你越怕别人失望，就越容易对自己的失望视而不见。`,
-            `所以这条视频想提醒你：从今天开始，先不要急着变得更好说话。先练习三件事。第一，感受不舒服的时候，别立刻解释自己。第二，别人越界的时候，用一句简单的话挡回去。第三，把“他会不会不高兴”，换成“我这样会不会委屈自己”。`,
-            `真正的清醒，不是变得冷漠，而是终于知道，关系可以重要，但你不能一直消失。你最该经营的，不是别人眼里的好人设，而是你自己心里的稳定感。`,
-            `如果你也正在经历${{pain}}，评论区留一句“我先站回自己”。`
+            viralLine,
+            `这条选题的重点不是重复一句观点，而是用「${{plan.angle}}」把「${{clean}}」讲具体。用户会停下来，是因为他正在经历：${{plan.scene}}。`,
+            `中段先拆误区：${{plan.mistake}}。不要急着给结论，先让用户意识到自己为什么一直卡在${{pain}}。`,
+            `然后给一个新的解释：这件事不是一句口号能解决的，它需要一个能立刻执行的动作。你可以把「${{clean}}」拆成三步。第一，${{plan.method[0]}}。第二，${{plan.method[1]}}。第三，${{plan.method[2]}}。`,
+            `为了让这条和其他选题不重复，举例部分就用：${{plan.proof}}。例子越具体，用户越容易判断“这说的是我”。`,
+            `结尾不要只喊口号，直接把互动问题抛出去：${{plan.interaction}}`
           ].filter(Boolean).join('\\n\\n');
       return {{ title: clean, titles: titles.slice(0,4), cover, script, theme, pain, formula, viralCase }};
     }}
@@ -2234,7 +2374,7 @@ cd /Users/a001/Documents/抖音工作流
       const item = state.currentIdeas?.[index];
       if (!item) return;
       $$('.idea-card').forEach((card, i)=>card.classList.toggle('active', i === index));
-      const pack = topicPackage(item.topic, item.theme, item.pain);
+      const pack = topicPackage(item);
       const copyText = [
         '【选题】' + pack.title,
         '',
@@ -2304,12 +2444,14 @@ cd /Users/a001/Documents/抖音工作流
             ? ['｜个人品牌','｜信任资产','｜内容定位','｜AI超级个体','｜成交路径']
             : ['｜清醒局','｜女性成长','｜关系边界','｜内核稳定','｜行动力'];
         const suffix = suffixPool[i % suffixPool.length];
-        rows.push({{ topic:`${{i+1}}. ${{base}}${{suffix}}`, theme, pain }});
+        const topic = `${{i+1}}. ${{base}}${{suffix}}`;
+        const plan = ideaVariantPlan(cleanTopic(topic), theme, pain, i);
+        rows.push({{ topic, theme, pain, variant:i, angle:plan.angle, domain:plan.domain }});
       }}
       state.currentIdeas = rows;
       $('#ideasResult').innerHTML = rows.map((x,i)=>`
         <div class="result idea-card">
-          <div><strong>${{esc(x.topic)}}</strong><div class="idea-meta"><span class="chip theme-chip">${{esc(x.theme.split('/')[0])}}</span><span class="chip">${{esc(x.pain.slice(0,12))}}</span></div></div>
+          <div><strong>${{esc(x.topic)}}</strong><div class="idea-meta"><span class="chip theme-chip">${{esc(x.theme.split('/')[0])}}</span><span class="chip">${{esc(x.angle || '独立角度')}}</span><span class="chip">${{esc(x.pain.slice(0,12))}}</span></div></div>
           <button class="secondary" onclick="renderIdeaPackage(${{i}})">确定并生成</button>
         </div>`).join('');
       $('#ideasResult').dataset.copy = rows.map(x=>x.topic).join('\\n');

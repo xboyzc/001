@@ -278,15 +278,65 @@ func writeState(ok: Bool, source: String, expectedCount: Int?, posts: [Post], me
     }
 }
 
-guard let app = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == "com.bytedance.douyin.desktop" }) else {
-    let state = ["ok": "false", "message": "抖音 App 未运行，请先打开抖音 App 并进入我的-作品页面。"]
-    try? writeJSON(state, to: statePath)
-    fputs("抖音 App 未运行，请先打开抖音 App。\n", stderr)
+func runningDouyinApp() -> NSRunningApplication? {
+    NSWorkspace.shared.runningApplications.first { $0.bundleIdentifier == "com.bytedance.douyin.desktop" }
+}
+
+func launchDouyinApp() -> NSRunningApplication? {
+    if let app = runningDouyinApp() {
+        return app
+    }
+
+    let candidates = [
+        URL(fileURLWithPath: "/Applications/抖音.app"),
+        URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Desktop/抖音.app"),
+    ]
+    for url in candidates where FileManager.default.fileExists(atPath: url.path) {
+        if !NSWorkspace.shared.open(url) {
+            fputs("打开抖音 App 失败：\(url.path)\n", stderr)
+        }
+        break
+    }
+
+    for _ in 0..<30 {
+        if let app = runningDouyinApp() {
+            Thread.sleep(forTimeInterval: 3.0)
+            return app
+        }
+        Thread.sleep(forTimeInterval: 0.5)
+    }
+    return nil
+}
+
+guard let app = launchDouyinApp() else {
+    let previousPosts = readPreviousPosts()
+    if !previousPosts.isEmpty {
+        writeState(
+            ok: true,
+            source: "douyin_desktop_app_accessibility_previous_success",
+            expectedCount: nil,
+            posts: previousPosts,
+            message: "抖音 App 未运行且自动打开失败，已沿用上一次成功抓取的作品列表继续刷新。",
+            fallback: true
+        )
+        try writeJSON(previousPosts, to: postsPath)
+        try writeJSON(previousPosts, to: visiblePostsPath)
+        print("抖音 App 未运行且自动打开失败，已沿用上一次成功抓取的 \(previousPosts.count) 条作品。")
+        exit(0)
+    }
+    writeState(
+        ok: false,
+        source: "douyin_desktop_app_accessibility",
+        expectedCount: nil,
+        posts: [],
+        message: "抖音 App 未运行，自动打开也失败。请确认 /Applications/抖音.app 存在并允许辅助功能访问。"
+    )
+    fputs("抖音 App 未运行，自动打开也失败。\n", stderr)
     exit(2)
 }
 
 app.activate(options: [.activateAllWindows])
-Thread.sleep(forTimeInterval: 0.8)
+Thread.sleep(forTimeInterval: 2.0)
 
 var root = AXUIElementCreateApplication(app.processIdentifier)
 var (posts, expectedCount) = collectPosts(from: root)
