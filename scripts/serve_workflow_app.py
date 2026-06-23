@@ -196,6 +196,67 @@ def cover_examples(theme):
     }
 
 
+def decode_hot_word(raw):
+    text = unescape(str(raw or "")).strip()
+    try:
+        text = json.loads(f'"{text}"')
+    except Exception:
+        pass
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def fetch_baidu_hot_topics(limit=20):
+    url = "https://top.baidu.com/board?tab=realtime"
+    req = Request(
+        url,
+        headers={
+            "User-Agent": "Mozilla/5.0",
+            "Accept": "text/html,application/xhtml+xml",
+            "Referer": "https://www.baidu.com/",
+        },
+    )
+    with urlopen(req, timeout=12) as resp:
+        html = resp.read().decode("utf-8", "ignore")
+    raw_words = re.findall(r'"word":"(.*?)"', html)
+    topics = []
+    seen = set()
+    for raw in raw_words:
+        title = decode_hot_word(raw)
+        if not title or title in seen:
+            continue
+        seen.add(title)
+        topics.append(
+            {
+                "title": title,
+                "source": "百度热榜",
+                "sourceUrl": url,
+                "angle": "热点借势：只借公众正在关注的讨论入口，不编造新闻细节。",
+            }
+        )
+        if len(topics) >= limit:
+            break
+    return topics
+
+
+def hot_topics(theme="", pain=""):
+    try:
+        topics = fetch_baidu_hot_topics(24)
+    except Exception:
+        topics = []
+    fallback = [
+        {"title": "AI 工具进入日常办公", "source": "本地热点兜底", "sourceUrl": "", "angle": "把 AI 热点转成个人效率和内容生产力。"},
+        {"title": "普通人做个人品牌", "source": "本地热点兜底", "sourceUrl": "", "angle": "把信任、内容资产和成交路径讲清楚。"},
+        {"title": "高考查分与选择焦虑", "source": "本地热点兜底", "sourceUrl": "", "angle": "借选择节点讲决策、规划和行动。"},
+        {"title": "全球资产波动", "source": "本地热点兜底", "sourceUrl": "", "angle": "借不确定性讲长期主义和确定感。"},
+        {"title": "极端天气与生活规划", "source": "本地热点兜底", "sourceUrl": "", "angle": "借突发变化讲风险意识和提前准备。"},
+    ]
+    return {
+        "updatedAt": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "sourceNote": "优先读取百度实时热榜；网络不可用时提供本地热点方向。生成时只做借势类比，不编造新闻事实。",
+        "topics": (topics or fallback)[:24],
+    }
+
+
 def read_json_body(handler):
     try:
         length = int(handler.headers.get("Content-Length", "0") or "0")
@@ -924,6 +985,20 @@ class Handler(SimpleHTTPRequestHandler):
         if parsed.path == "/api/cover-examples":
             query = parse_qs(parsed.query)
             payload = cover_examples((query.get("theme") or [""])[0])
+            body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if parsed.path == "/api/hot-topics":
+            query = parse_qs(parsed.query)
+            payload = hot_topics(
+                (query.get("theme") or [""])[0],
+                (query.get("pain") or [""])[0],
+            )
             body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")

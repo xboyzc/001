@@ -521,6 +521,15 @@ def render(rows):
             <label class="muted">套用爆款拆解案例</label>
             <select id="ideaViralCase"></select>
             <div style="height:10px"></div>
+            <label class="muted">热点结合</label>
+            <select id="ideaHotTopic"><option value="">不结合热点</option></select>
+            <div style="height:8px"></div>
+            <input id="ideaHotCustom" placeholder="也可以手动输入热点，例如：AI 新工具 / 高考查分 / 资产波动">
+            <div class="toolbar">
+              <button class="secondary" id="refreshHotTopics">刷新热点</button>
+              <span class="muted" id="hotTopicStatus">可结合当前全网热点做借势口播</span>
+            </div>
+            <div style="height:10px"></div>
             <label class="muted">生成数量</label>
             <select id="ideaCount">
               <option>12</option><option selected>24</option><option>36</option>
@@ -1946,6 +1955,34 @@ cd /Users/a001/Documents/抖音工作流
       return ($('#ideaPainCustom')?.value || '').trim() || $('#ideaPain').value || '想做账号但不知道怎么建立信任';
     }}
 
+    function selectedIdeaHot() {{
+      const manual = ($('#ideaHotCustom')?.value || '').trim();
+      if (manual) return {{ title:manual, source:'手动输入热点', angle:'按手动输入热点做借势切入。' }};
+      const raw = $('#ideaHotTopic')?.value || '';
+      if (!raw) return null;
+      try {{
+        return JSON.parse(raw);
+      }} catch {{
+        return {{ title:raw, source:'热点', angle:'结合当前热点做借势切入。' }};
+      }}
+    }}
+
+    async function loadHotTopics() {{
+      const select = $('#ideaHotTopic');
+      const status = $('#hotTopicStatus');
+      if (!select) return;
+      if (status) status.textContent = '正在刷新热点...';
+      try {{
+        const res = await fetch(apiUrl(`/api/hot-topics?theme=${{encodeURIComponent(selectedIdeaTheme())}}&pain=${{encodeURIComponent(selectedIdeaPain())}}&t=${{Date.now()}}`), apiOptions({{ cache:'no-store' }}));
+        const data = await res.json();
+        state.hotTopics = data.topics || [];
+        select.innerHTML = '<option value="">不结合热点</option>' + state.hotTopics.map((x, i)=>`<option value="${{esc(JSON.stringify(x))}}">${{i+1}}. ${{esc(x.title.slice(0,34))}}｜${{esc(x.source || '热点')}}</option>`).join('');
+        if (status) status.textContent = data.sourceNote || `已刷新 ${{state.hotTopics.length}} 条热点`;
+      }} catch (err) {{
+        if (status) status.textContent = '热点刷新失败，可手动输入热点继续生成';
+      }}
+    }}
+
     function analyzeDraft() {{
       const title = $('#draftTitle').value.trim();
       const text = $('#draftText').value.trim();
@@ -2313,12 +2350,17 @@ cd /Users/a001/Documents/抖音工作流
       const formula = hookById($('#ideaHook')?.value || currentHookId());
       const viralCase = currentViralArchive();
       const careerMode = isCareerTheme(theme, pain);
-      const plan = ideaVariantPlan(clean, theme, pain, Number(idea.variant || 0));
+      const hot = idea.hot || selectedIdeaHot();
+      const hotTitle = hot?.title || '';
+      const plan = ideaVariantPlan(`${{clean}} ${{hotTitle}}`, theme, pain, Number(idea.variant || 0));
       const baseOpening = hookLine(formula, clean, theme, pain);
       const openingLead = /[。！？.!?]$/.test(baseOpening.trim()) ? baseOpening.trim() : `${{baseOpening.trim()}}。`;
       const opening = careerMode
         ? `${{openingLead}}今天这条内容只讲一个切口：「${{clean}}」。不要泛泛聊涨粉，也不要泛泛聊工具，要把用户为什么不信你这件事讲具体。`
         : `${{openingLead}}今天这条内容只围绕「${{clean}}」展开，用一个具体场景、一个误区和一个动作讲清楚。`;
+      const hotLine = hotTitle
+        ? `这两天大家都在关注「${{hotTitle}}」。我不展开判断新闻本身，只借这个热点说一个普通人做内容一定要看懂的规律：热点真正有用的地方，不是拿来硬蹭，而是拿来把用户已经关心的事，转成你能提供的价值。`
+        : '';
       const titles = careerMode
         ? [
             clean,
@@ -2352,22 +2394,28 @@ cd /Users/a001/Documents/抖音工作流
       const script = careerMode
         ? [
             viralLine,
-            `这条内容不要泛泛讲${{themeName}}，要把问题压到一个具体切口：${{clean}}。用户真正卡住的不是不知道要努力，而是${{pain}}。`,
-            `开头先给一个画面：${{plan.scene}}。这个画面一出来，用户才会觉得你说的不是空话，而是他正在遇到的事。`,
-            `接着翻一个误区：${{plan.mistake}}。你要告诉他，问题不是“再多发几条就好了”，而是要先把信任、价值和下一步讲清楚。`,
-            `方法段直接给三步。第一，${{plan.method[0]}}。第二，${{plan.method[1]}}。第三，${{plan.method[2]}}。这三步要围绕「${{clean}}」展开，不要跑回泛泛的涨粉焦虑。`,
-            `为了让这条和其他选题明显不同，案例部分就放在：${{plan.proof}}。这里最好讲一个真实业务场景，让用户看见你怎么判断。`,
-            `最后收束到一个明确动作：${{plan.interaction}}`
+            hotLine,
+            `你有没有发现，很多人想做${{themeName}}，一上来就问：我该发什么、怎么涨粉、怎么变现。听起来很努力，但用户不会因为你努力就相信你。用户只会在几秒钟里判断一件事：这个人到底懂不懂我，能不能帮我解决问题。`,
+            `所以这条内容不要泛泛讲${{themeName}}，要把问题压到一个具体切口：${{clean}}。用户真正卡住的不是不知道要努力，而是${{pain}}。`,
+            `你可以先给他一个非常具体的画面：${{plan.scene}}。这句话一出来，用户会觉得：对，我就是这样，我不是不想做，是我不知道该怎么让别人相信我。`,
+            `接着你要翻一个误区：${{plan.mistake}}。很多人以为内容做不起来，是因为没有灵感、没有热点、没有技巧。但真正的问题往往是，你的内容没有形成一个清晰的信任链路。`,
+            `什么叫信任链路？就是用户看完以后，能立刻知道三件事：第一，你帮谁；第二，你解决什么问题；第三，为什么这件事可以相信你。如果这三件事不清楚，发再多内容，也只是在热闹里消耗自己。`,
+            `那这条视频可以直接给用户三个动作。第一，${{plan.method[0]}}。这一步是为了让用户一眼知道你的位置。第二，${{plan.method[1]}}。这一步是为了让你的内容不是散的，而是能连续建立印象。第三，${{plan.method[2]}}。这一步是为了让用户看完以后知道下一步该做什么。`,
+            `这里你可以补一个更具体的例子：${{plan.proof}}。不要讲得太大，就拿一个真实业务场景说清楚：一个人从不信你，到愿意继续看你，中间到底发生了什么。`,
+            `最后记住，热点只是入口，信任才是结果。你借热点，是为了让用户停下来；你讲方法，是为了让用户留下来；你给行动，是为了让用户愿意和你发生下一步关系。`,
+            `如果你现在也在做账号，先别急着再发一条作品。先回答我一个问题：${{plan.interaction}}`
           ].filter(Boolean).join('\\n\\n')
         : [
             viralLine,
-            `这条选题的重点不是重复一句观点，而是用「${{plan.angle}}」把「${{clean}}」讲具体。用户会停下来，是因为他正在经历：${{plan.scene}}。`,
-            `中段先拆误区：${{plan.mistake}}。不要急着给结论，先让用户意识到自己为什么一直卡在${{pain}}。`,
-            `然后给一个新的解释：这件事不是一句口号能解决的，它需要一个能立刻执行的动作。你可以把「${{clean}}」拆成三步。第一，${{plan.method[0]}}。第二，${{plan.method[1]}}。第三，${{plan.method[2]}}。`,
-            `为了让这条和其他选题不重复，举例部分就用：${{plan.proof}}。例子越具体，用户越容易判断“这说的是我”。`,
-            `结尾不要只喊口号，直接把互动问题抛出去：${{plan.interaction}}`
+            hotLine,
+            `你有没有发现，很多内容听起来很对，但用户听完只是点点头，然后就划走了。原因不是观点不够狠，而是它没有把用户带进一个具体场景里。`,
+            `所以这条选题的重点不是重复一句观点，而是用「${{plan.angle}}」把「${{clean}}」讲具体。用户会停下来，是因为他正在经历：${{plan.scene}}。`,
+            `中段先拆误区：${{plan.mistake}}。不要急着给结论，先让用户意识到自己为什么一直卡在${{pain}}。只有他先看见问题，后面的方法才会有重量。`,
+            `接下来给一个新的解释：这件事不是一句口号能解决的，它需要一个能立刻执行的动作。你可以把「${{clean}}」拆成三步。第一，${{plan.method[0]}}。这一步是先把问题落地。第二，${{plan.method[1]}}。这一步是让用户看到自己能开始。第三，${{plan.method[2]}}。这一步是把内容从情绪共鸣推到行动。`,
+            `为了让这条和其他选题不重复，举例部分就用：${{plan.proof}}。例子越具体，用户越容易判断：这说的就是我。`,
+            `最后收回来，不要只喊口号。你可以这样问：${{plan.interaction}}`
           ].filter(Boolean).join('\\n\\n');
-      return {{ title: clean, titles: titles.slice(0,4), cover, script, theme, pain, formula, viralCase }};
+      return {{ title: clean, titles: titles.slice(0,4), cover, script, theme, pain, formula, viralCase, hot }};
     }}
 
     function renderIdeaPackage(index) {{
@@ -2378,6 +2426,8 @@ cd /Users/a001/Documents/抖音工作流
       const copyText = [
         '【选题】' + pack.title,
         '',
+        pack.hot ? `【热点借势】${{pack.hot.title}}（${{pack.hot.source || '热点'}}）` : '',
+        pack.hot ? '' : '',
         '【标题】',
         ...pack.titles.map((t,i)=>`${{i+1}}. ${{t}}`),
         '',
@@ -2395,6 +2445,7 @@ cd /Users/a001/Documents/抖音工作流
           <span class="chip">${{esc(pack.pain)}}</span>
         </div>
         <div class="result"><b>自动套用钩子：</b>${{esc(pack.formula.name)}}<br><span class="muted">${{esc(pack.formula.pattern)}}</span></div>
+        ${{pack.hot ? `<div class="result"><b>结合热点：</b>${{esc(pack.hot.title)}}<br><span class="muted">${{esc(pack.hot.source || '热点')}} · ${{esc(pack.hot.angle || '作为借势口播入口')}}</span></div>` : ''}}
         ${{pack.viralCase ? `<div class="result"><b>套用爆款案例：</b>${{esc(pack.viralCase.title)}}<br><span class="muted">${{esc(pack.viralCase.source)}} · 爆款潜力 ${{pack.viralCase.avg}}</span></div>` : ''}}
         ${{renderDanaoReference('选题生成器', 3)}}
         <div class="result"><b>标题方案：</b><br>${{pack.titles.map((t,i)=>`${{i+1}}. ${{esc(t)}}`).join('<br>')}}</div>
@@ -2434,6 +2485,7 @@ cd /Users/a001/Documents/抖音工作流
       syncHookSelects($('#ideaHook').value);
       const viralCase = currentViralArchive();
       const careerMode = isCareerTheme(theme, pain);
+      const hot = selectedIdeaHot();
       const templates = careerMode ? careerTopicTemplates : topicTemplates;
       const rows = [];
       for (let i=0;i<count;i++) {{
@@ -2445,8 +2497,8 @@ cd /Users/a001/Documents/抖音工作流
             : ['｜清醒局','｜女性成长','｜关系边界','｜内核稳定','｜行动力'];
         const suffix = suffixPool[i % suffixPool.length];
         const topic = `${{i+1}}. ${{base}}${{suffix}}`;
-        const plan = ideaVariantPlan(cleanTopic(topic), theme, pain, i);
-        rows.push({{ topic, theme, pain, variant:i, angle:plan.angle, domain:plan.domain }});
+        const plan = ideaVariantPlan(`${{cleanTopic(topic)}} ${{hot?.title || ''}}`, theme, pain, i);
+        rows.push({{ topic, theme, pain, hot, variant:i, angle:plan.angle, domain:plan.domain }});
       }}
       state.currentIdeas = rows;
       $('#ideasResult').innerHTML = rows.map((x,i)=>`
@@ -2697,6 +2749,9 @@ cd /Users/a001/Documents/抖音工作流
     $('#ideaThemeCustom').addEventListener('input', generateIdeas);
     $('#ideaPainCustom').addEventListener('input', generateIdeas);
     $('#ideaViralCase').addEventListener('change', generateIdeas);
+    $('#ideaHotTopic').addEventListener('change', generateIdeas);
+    $('#ideaHotCustom').addEventListener('input', generateIdeas);
+    $('#refreshHotTopics').addEventListener('click', loadHotTopics);
     $('#homeRefreshDouyin').addEventListener('click', startDouyinRefresh);
     $('#refreshDouyin').addEventListener('click', startDouyinRefresh);
     $('#homeRefreshProfile').addEventListener('click',()=>startProfileRefresh($('#homeProfileUrl').value));
@@ -2714,6 +2769,7 @@ cd /Users/a001/Documents/抖音工作流
     renderKpis();
     renderVideoList();
     renderPlanner();
+    loadHotTopics();
     generateIdeas();
     pollRefreshStatus();
   </script>
