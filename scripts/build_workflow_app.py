@@ -537,6 +537,10 @@ def render(rows):
               <button class="secondary" id="refreshHotTopics">刷新抖音热搜</button>
               <span class="muted" id="hotTopicStatus">可结合当前抖音新闻热点做口播</span>
             </div>
+            <div class="toolbar">
+              <button class="secondary" id="checkDedaoBrain">检查得到大脑</button>
+              <span class="muted" id="dedaoBrainStatus">生成前会自动检索得到大脑记忆、成果和知识库</span>
+            </div>
             <div style="height:10px"></div>
             <label class="muted">生成数量</label>
             <select id="ideaCount">
@@ -632,6 +636,7 @@ cd /Users/a001/Documents/抖音工作流
       ...options,
       headers: {{ ...(options.headers || {{}}), ...(accessKey ? {{ 'X-Workflow-Key': accessKey }} : {{}}) }}
     }});
+    state.dedaoBrain = {{ status:null, current:null, busy:false, cache:{{}} }};
 
     const hookFormulas = [
       {{ id:'pain_reverse', name:'痛点反转', pattern:'你以为{{pain}}，其实真正的问题是{{truth}}', use:'适合清醒观点、反常识选题' }},
@@ -671,6 +676,112 @@ cd /Users/a001/Documents/抖音工作流
           <b>外部大脑参考：</b><span class="muted">已接入 danao 文件夹 ${{sourceCount}} 份课件，输出前先参考相关方法论。</span><br>
           ${{refs.map((x,i)=>`${{i+1}}. 【${{esc(x.module)}}】${{esc(x.principle)}}`).join('<br>')}}
         </div>`;
+    }}
+
+    function dedaoItems(memory) {{
+      return (memory?.results || state.dedaoBrain?.current?.results || []).filter(x => x && (x.title || x.content));
+    }}
+
+    function renderDedaoBrainReference(area, memory, limit=4) {{
+      const items = dedaoItems(memory).slice(0, limit);
+      const status = state.dedaoBrain?.status;
+      if (!items.length) {{
+        const note = status?.configured === false
+          ? '得到大脑 API 尚未配置，当前只使用本地 danao 课件。'
+          : (memory?.message || '本次没有召回到足够相关的得到大脑笔记，已使用本地 danao 课件兜底。');
+        return `<div class="result danao-ref"><b>得到大脑实时记忆：</b><span class="muted">${{esc(note)}}</span></div>`;
+      }}
+      return `
+        <div class="result danao-ref">
+          <b>得到大脑实时记忆：</b><span class="muted">已在“${{esc(area)}}”生成前召回 ${{items.length}} 条相关笔记/成果。</span><br>
+          ${{items.map((x,i)=>`${{i+1}}. 【${{esc(x.title || '得到大脑笔记')}}】${{esc((x.content || '').slice(0, 118))}}`).join('<br>')}}
+        </div>`;
+    }}
+
+    function dedaoCleanPoint(item) {{
+      const raw = `${{item?.title || ''}}。${{item?.content || ''}}`
+        .replace(/#[^\\s#]+/g, '')
+        .replace(/[📌🔑✅⚠️]/g, '')
+        .replace(/核心内容概览|核心工具模块|实战版|指南|方法论/g, '')
+        .replace(/\\s+/g, ' ')
+        .trim();
+      const parts = raw.split(/[。！？!?；;\\n]/).map(x=>x.trim()).filter(x=>x.length >= 10);
+      return safeClip(parts.find(x=>!/^(一|二|三|四|五|六|七|八|九|十|\\d+)[)、.]/.test(x)) || parts[0] || raw, 118);
+    }}
+
+    async function loadDedaoStatus() {{
+      const target = $('#dedaoBrainStatus');
+      if (target) target.textContent = '正在检查得到大脑连接...';
+      try {{
+        const res = await fetch(apiUrl('/api/dedao/status'), apiOptions({{ cache:'no-store' }}));
+        const data = await res.json();
+        state.dedaoBrain.status = data;
+        if (target) {{
+          if (!data.configured) target.textContent = '得到大脑未配置，当前使用本地 danao 课件';
+          else if (data.reachable === false) target.textContent = data.message || '得到大脑连接失败';
+          else target.textContent = `得到大脑已连接：${{data.label || '得到大脑'}}，知识库 ${{data.knowledgeCount || 0}} 个`;
+        }}
+        return data;
+      }} catch (err) {{
+        if (target) target.textContent = '无法连接得到大脑接口，当前使用本地 danao 课件';
+        return {{ configured:false, reachable:false, message:String(err?.message || err) }};
+      }}
+    }}
+
+    async function recallDedaoBrain(area, query, topK=6) {{
+      const clean = String(query || '').replace(/\\s+/g, ' ').trim();
+      if (!clean) return {{ ok:false, results:[], message:'检索词为空' }};
+      const cacheKey = `${{area}}|${{clean}}|${{topK}}`;
+      if (state.dedaoBrain.cache[cacheKey]) {{
+        state.dedaoBrain.current = state.dedaoBrain.cache[cacheKey];
+        return state.dedaoBrain.current;
+      }}
+      const target = $('#dedaoBrainStatus');
+      if (target) target.textContent = `正在检索得到大脑：${{clean.slice(0, 26)}}...`;
+      try {{
+        const res = await fetch(apiUrl('/api/dedao-recall'), apiOptions({{
+          method:'POST',
+          headers: {{ 'Content-Type':'application/json' }},
+          body: JSON.stringify({{ query:clean, top_k:topK }})
+        }}));
+        const data = await res.json();
+        state.dedaoBrain.status = data.status || state.dedaoBrain.status;
+        state.dedaoBrain.current = data;
+        state.dedaoBrain.cache[cacheKey] = data;
+        if (target) {{
+          target.textContent = data.ok
+            ? `已召回得到大脑 ${{(data.results || []).length}} 条记忆，生成将优先使用这些素材`
+            : (data.message || '得到大脑检索失败，已用本地 danao 兜底');
+        }}
+        return data;
+      }} catch (err) {{
+        const data = {{ ok:false, results:[], message:String(err?.message || err) }};
+        state.dedaoBrain.current = data;
+        if (target) target.textContent = '得到大脑检索失败，已用本地 danao 兜底';
+        return data;
+      }}
+    }}
+
+    function dedaoBrainLine(memory, theme, pain, clean, careerMode=false) {{
+      const items = dedaoItems(memory);
+      if (!items.length) return '';
+      const first = items[0];
+      const second = items[1];
+      const point = dedaoCleanPoint(first);
+      const support = second ? dedaoCleanPoint(second) : '';
+      if (careerMode) {{
+        return `这里有一个很关键的素材判断：${{point || '先把能力、对象和结果说清楚'}}。所以这一条不能只讲观点，要把用户能看见的入口、动作和结果一起讲出来。${{support ? `再补一句：${{support}}。` : ''}}`;
+      }}
+      return `这里有一个很关键的素材判断：${{point || '先把问题放进真实场景，再给一个能马上做的小动作'}}。所以这一条不要停在道理上，要把场景、原因和今天能做的小动作讲清楚。${{support ? `再补一句：${{support}}。` : ''}}`;
+    }}
+
+    function dedaoTopicBase(theme, pain, memory, index) {{
+      const items = dedaoItems(memory);
+      if (!items.length || index % 3 !== 0) return '';
+      const item = items[Math.floor(index / 3) % items.length];
+      const title = safeClip(item.title || item.content || pain, 18);
+      if (!title) return '';
+      return `${{theme.split('/')[0]}}：从得到大脑「${{title}}」延伸出的短视频选题`;
     }}
 
     function currentHookId() {{
@@ -2624,6 +2735,7 @@ cd /Users/a001/Documents/抖音工作流
       const hotMeta = hotMetaLine(hot);
       const viralCase = currentViralArchive();
       const plan = aiSuperWorkflowPlan(clean, theme, pain, variant);
+      const memory = idea.memory || state.dedaoBrain?.current || null;
       const formula = {{
         id:'ai-workbench-direct',
         name:'AI工作台口播开场',
@@ -2635,17 +2747,21 @@ cd /Users/a001/Documents/抖音工作流
         `你以为做${{themeName}}靠的是灵感，其实靠的是一套每天能跑起来的流程。`,
         `今天这段话，送给所有素材很多、工具很多，但发内容还是很乱的人。`
       ];
+      const aiHotSource = hot?.source === '手动输入热点' ? '你输入的抖音热点' : '今天抖音热榜';
+      const aiHotSummary = hotSummary && !hotSummary.includes('手动输入') ? `可以顺手带一句：${{hotSummary}}。` : '';
       const hotLine = hotTitle
-        ? `拿今天抖音热榜的「${{hotTitle}}」举例。${{hotMeta ? `它现在是${{hotMeta}}。` : ''}}${{hotSummary ? `公开信息里能看到：${{hotSummary}}` : ''}}你别急着把它塞进标题，先看它背后用户正在关心什么，再决定它能不能进入你的选题库。`
+        ? `拿${{aiHotSource}}「${{hotTitle}}」举例。${{hotMeta ? `它现在是${{hotMeta}}。` : ''}}${{aiHotSummary}}你别急着把它塞进标题，先看它背后用户正在关心什么，再决定它能不能进入你的选题库。`
         : '';
       const caseLine = viralCase
         ? `很多爆款表面看是标题厉害，其实背后都有同一个东西：它知道用户此刻最卡在哪里，也知道下一句该把人带到哪里。`
         : '';
+      const brainLine = dedaoBrainLine(memory, theme, pain, clean, true);
       const steps = plan.steps.map(step => String(step).replace(/^第[一二三四五六七八九十]+[，、]/, '').trim());
       const script = [
         openings[variant % openings.length],
         hotLine,
         caseLine,
+        brainLine,
         `真正拉开差距的地方，是「${{plan.angle}}」。${{plan.scene}}。`,
         `${{plan.first}}。这不是一个表格动作，而是一种内容生产方式：热点不再只是热点，评论不再只是评论，旧作品也不再只是过去发过的一条视频。它们会变成下一条口播的开头、场景、观点和结尾。`,
         `一个能长期跑起来的内容系统，里面一定有三个东西：${{steps[0]}}，${{steps[1]}}，${{steps[2]}}。少了其中任何一个，文案都会变成临时发挥，看起来很努力，听起来却没有连续性。`,
@@ -2667,7 +2783,7 @@ cd /Users/a001/Documents/抖音工作流
         safeClip(plan.cover[1], 10),
         safeClip(plan.cover[2], 10)
       ];
-      return {{ title: clean, titles: titles.slice(0,4), cover, script, theme, pain, formula, viralCase, hot, aiMode:true, angle:plan.angle, domain:'ai_super_workbench' }};
+      return {{ title: clean, titles: titles.slice(0,4), cover, script, theme, pain, formula, viralCase, hot, memory, aiMode:true, angle:plan.angle, domain:'ai_super_workbench' }};
     }}
 
     function topicPackage(topicOrIdea, theme, pain) {{
@@ -2693,6 +2809,8 @@ cd /Users/a001/Documents/抖音工作流
       const variant = Number(idea.variant || 0);
       const plan = ideaVariantPlan(`${{clean}} ${{hotTitle}}`, theme, pain, variant);
       const voice = oralVariantProfile(clean, theme, pain, plan, variant, careerMode);
+      const memory = idea.memory || state.dedaoBrain?.current || null;
+      const brainLine = dedaoBrainLine(memory, theme, pain, clean, careerMode);
       const baseOpening = hookLine(formula, clean, theme, pain);
       const openingLead = /[。！？.!?]$/.test(baseOpening.trim()) ? baseOpening.trim() : `${{baseOpening.trim()}}。`;
       const opening = voice.hook || openingLead;
@@ -2767,6 +2885,7 @@ cd /Users/a001/Documents/抖音工作流
             viralLine,
             hotLine,
             hotBridge,
+            brainLine,
             voice.scene,
             voice.conflict,
             voice.turn,
@@ -2781,6 +2900,7 @@ cd /Users/a001/Documents/抖音工作流
             viralLine,
             hotLine,
             hotBridge,
+            brainLine,
             voice.scene,
             voice.conflict,
             voice.turn,
@@ -2790,13 +2910,20 @@ cd /Users/a001/Documents/抖音工作流
             actionLine,
             `最后我想问你一句：${{voice.close}}`
           ].filter(Boolean).join('\\n\\n');
-      return {{ title: clean, titles: titles.slice(0,4), cover, script, theme, pain, formula, viralCase, hot }};
+      return {{ title: clean, titles: titles.slice(0,4), cover, script, theme, pain, formula, viralCase, hot, memory }};
     }}
 
-    function renderIdeaPackage(index) {{
+    async function renderIdeaPackage(index) {{
       const item = state.currentIdeas?.[index];
       if (!item) return;
       $$('.idea-card').forEach((card, i)=>card.classList.toggle('active', i === index));
+      $('#ideaPackage').innerHTML = '<div class="result muted">正在读取得到大脑记忆、成果和知识库，并生成标题 / 文字稿 / 封面...</div>';
+      const itemHot = item.hot || selectedIdeaHot();
+      item.memory = await recallDedaoBrain(
+        '确定选题后的文稿生成',
+        `${{cleanTopic(item.topic)}} ${{item.theme}} ${{item.pain}} ${{itemHot?.title || ''}} ${{item.angle || ''}}`,
+        8
+      );
       const pack = topicPackage(item);
       const packHotMeta = hotMetaLine(pack.hot);
       const packHotSummary = hotSummaryLine(pack.hot);
@@ -2826,6 +2953,7 @@ cd /Users/a001/Documents/抖音工作流
         <div class="result"><b>自动套用钩子：</b>${{esc(pack.formula.name)}}<br><span class="muted">${{esc(pack.formula.pattern)}}</span></div>
         ${{pack.hot ? `<div class="result"><b>结合抖音热点：</b>${{esc(pack.hot.title)}}<br><span class="muted">${{esc(pack.hot.source || '抖音热搜')}}${{packHotMeta ? ' · ' + esc(packHotMeta) : ''}}</span>${{packHotSummary ? `<div class="muted" style="margin-top:6px">${{esc(packHotSummary)}}</div>` : ''}}</div>` : ''}}
         ${{pack.viralCase ? `<div class="result"><b>套用爆款案例：</b>${{esc(pack.viralCase.title)}}<br><span class="muted">${{esc(pack.viralCase.source)}} · 爆款潜力 ${{pack.viralCase.avg}}</span></div>` : ''}}
+        ${{renderDedaoBrainReference('确定选题后的文稿生成', pack.memory, 4)}}
         ${{renderDanaoReference('选题生成器', 3)}}
         <div class="result"><b>标题方案：</b><br>${{pack.titles.map((t,i)=>`${{i+1}}. ${{esc(t)}}`).join('<br>')}}</div>
         <div class="cover">${{esc(pack.cover.join(' / '))}}</div>
@@ -2857,7 +2985,7 @@ cd /Users/a001/Documents/抖音工作流
       analyzeDraft();
     }}
 
-    function generateIdeas() {{
+    async function generateIdeas() {{
       const theme = selectedIdeaTheme();
       const pain = selectedIdeaPain();
       const count = Number($('#ideaCount').value);
@@ -2866,10 +2994,12 @@ cd /Users/a001/Documents/抖音工作流
       const aiSuperMode = isAISuperContentTheme(theme, pain);
       const careerMode = !aiSuperMode && isCareerTheme(theme, pain);
       const hot = selectedIdeaHot();
+      const memory = await recallDedaoBrain('选题生成器', `${{theme}} ${{pain}} ${{hot?.title || ''}}`, 8);
       const templates = aiSuperMode ? aiSuperTopicTemplates : careerMode ? careerTopicTemplates : topicTemplates;
       const rows = [];
       for (let i=0;i<count;i++) {{
-        const base = templates[i % templates.length].replaceAll('{{pain}}', pain).replaceAll('{{theme}}', theme.split('/')[0]);
+        const brainBase = dedaoTopicBase(theme, pain, memory, i);
+        const base = brainBase || templates[i % templates.length].replaceAll('{{pain}}', pain).replaceAll('{{theme}}', theme.split('/')[0]);
         const suffixPool = viralCase
           ? ['｜爆款同构','｜外部案例复刻','｜高互动结构','｜封面反差','｜评论区入口']
           : aiSuperMode
@@ -2880,7 +3010,7 @@ cd /Users/a001/Documents/抖音工作流
         const suffix = suffixPool[i % suffixPool.length];
         const topic = `${{i+1}}. ${{base}}${{suffix}}`;
         const plan = aiSuperMode ? aiSuperWorkflowPlan(cleanTopic(topic), theme, pain, i) : ideaVariantPlan(`${{cleanTopic(topic)}} ${{hot?.title || ''}}`, theme, pain, i);
-        rows.push({{ topic, theme, pain, hot, variant:i, angle:plan.angle, domain:aiSuperMode ? 'ai_super_workbench' : plan.domain }});
+        rows.push({{ topic, theme, pain, hot, memory, variant:i, angle:plan.angle, domain:aiSuperMode ? 'ai_super_workbench' : plan.domain }});
       }}
       state.currentIdeas = rows;
       $('#ideasResult').innerHTML = rows.map((x,i)=>`
@@ -2890,6 +3020,11 @@ cd /Users/a001/Documents/抖音工作流
         </div>`).join('');
       $('#ideasResult').dataset.copy = rows.map(x=>x.topic).join('\\n');
       renderIdeaPackage(0);
+    }}
+    let generateIdeasTimer = null;
+    function scheduleGenerateIdeas() {{
+      clearTimeout(generateIdeasTimer);
+      generateIdeasTimer = setTimeout(()=>generateIdeas(), 520);
     }}
     window.makeSiblingIdeas = function(idx) {{
       const v = state.videos.find(x=>x.idx===idx);
@@ -3126,14 +3261,15 @@ cd /Users/a001/Documents/抖音工作流
     $('#analyzeViral').addEventListener('click', analyzeViral);
     $('#generateIdeas').addEventListener('click', generateIdeas);
     $('#copyIdeas').addEventListener('click', async()=>{{ await navigator.clipboard.writeText($('#ideasResult').dataset.copy || ''); }});
-    $('#ideaTheme').addEventListener('change', generateIdeas);
-    $('#ideaPain').addEventListener('change', generateIdeas);
-    $('#ideaThemeCustom').addEventListener('input', generateIdeas);
-    $('#ideaPainCustom').addEventListener('input', generateIdeas);
-    $('#ideaViralCase').addEventListener('change', generateIdeas);
-    $('#ideaHotTopic').addEventListener('change', generateIdeas);
-    $('#ideaHotCustom').addEventListener('input', generateIdeas);
+    $('#ideaTheme').addEventListener('change', scheduleGenerateIdeas);
+    $('#ideaPain').addEventListener('change', scheduleGenerateIdeas);
+    $('#ideaThemeCustom').addEventListener('input', scheduleGenerateIdeas);
+    $('#ideaPainCustom').addEventListener('input', scheduleGenerateIdeas);
+    $('#ideaViralCase').addEventListener('change', scheduleGenerateIdeas);
+    $('#ideaHotTopic').addEventListener('change', scheduleGenerateIdeas);
+    $('#ideaHotCustom').addEventListener('input', scheduleGenerateIdeas);
     $('#refreshHotTopics').addEventListener('click', loadHotTopics);
+    $('#checkDedaoBrain').addEventListener('click', loadDedaoStatus);
     $('#homeRefreshDouyin').addEventListener('click', startDouyinRefresh);
     $('#refreshDouyin').addEventListener('click', startDouyinRefresh);
     $('#homeRefreshProfile').addEventListener('click',()=>startProfileRefresh($('#homeProfileUrl').value));
@@ -3151,6 +3287,7 @@ cd /Users/a001/Documents/抖音工作流
     renderKpis();
     renderVideoList();
     renderPlanner();
+    loadDedaoStatus();
     loadHotTopics();
     generateIdeas();
     pollRefreshStatus();

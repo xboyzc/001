@@ -11,7 +11,7 @@ from html.parser import HTMLParser
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from socketserver import TCPServer
-from urllib.parse import parse_qs, quote, urljoin, urlparse
+from urllib.parse import parse_qs, quote, urlencode, urljoin, urlparse
 from urllib.request import Request, urlopen
 
 from build_strategy_dashboard import DATA_PATH, build_rows
@@ -25,6 +25,7 @@ VIRAL_MEDIA_DIR = ROOT / "data" / "tmp_viral_media"
 CONFIG_PATH = ROOT / "data" / "workflow_server_config.json"
 HOST = "0.0.0.0"
 PORT = 8787
+GETNOTE_BASE_URL = "https://openapi.biji.com/open/api/v1"
 
 
 SOURCE_URL = "https://www.designkit.cn/topic/explosive-vibrato-short-video-cover"
@@ -86,6 +87,119 @@ def authorized(path, headers, client_address):
     query_key = (parse_qs(parsed.query).get("key") or [""])[0]
     header_key = headers.get("X-Workflow-Key", "")
     return CONFIG["access_key"] in {query_key, header_key}
+
+
+def public_secret(value):
+    text = str(value or "")
+    if len(text) <= 10:
+        return "***" if text else ""
+    return f"{text[:7]}...{text[-4:]}"
+
+
+def getnote_config():
+    data = CONFIG.get("dedao") or CONFIG.get("getnote") or {}
+    return {
+        "api_key": data.get("api_key") or data.get("apiKey") or "",
+        "client_id": data.get("client_id") or data.get("clientId") or "",
+        "label": data.get("label") or "得到大脑",
+    }
+
+
+def getnote_public_status():
+    cfg = getnote_config()
+    return {
+        "configured": bool(cfg["api_key"] and cfg["client_id"]),
+        "label": cfg["label"],
+        "apiKey": public_secret(cfg["api_key"]),
+        "clientId": public_secret(cfg["client_id"]),
+        "baseUrl": GETNOTE_BASE_URL,
+    }
+
+
+def getnote_request(method, path, payload=None, params=None, timeout=18):
+    cfg = getnote_config()
+    if not (cfg["api_key"] and cfg["client_id"]):
+        return {"ok": False, "message": "得到大脑 API Key 或 Client ID 未配置"}
+    url = GETNOTE_BASE_URL + path
+    if params:
+        url += "?" + urlencode(params)
+    body = None
+    headers = {
+        "Authorization": cfg["api_key"],
+        "X-Client-ID": cfg["client_id"],
+        "Accept": "application/json",
+    }
+    if payload is not None:
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+    req = Request(url, data=body, method=method, headers=headers)
+    try:
+        with urlopen(req, timeout=timeout) as resp:
+            raw = resp.read().decode("utf-8", "ignore")
+            data = json.loads(raw) if raw else {}
+            return {"ok": True, "status": resp.status, "data": data}
+    except Exception as exc:
+        message = str(exc)
+        if "401" in message or "403" in message:
+            message = "得到大脑鉴权失败，请检查 API Key 和 Client ID"
+        return {"ok": False, "message": message}
+
+
+def normalize_getnote_results(payload):
+    data = payload.get("data") if isinstance(payload, dict) else {}
+    results = []
+    if isinstance(data, dict):
+        results = data.get("results") or data.get("notes") or []
+    elif isinstance(data, list):
+        results = data
+    normalized = []
+    for item in results[:10]:
+        if not isinstance(item, dict):
+            continue
+        title = item.get("title") or item.get("name") or "得到大脑笔记"
+        content = item.get("content") or item.get("excerpt") or item.get("summary") or ""
+        normalized.append(
+            {
+                "noteId": str(item.get("note_id") or item.get("id") or ""),
+                "title": str(title)[:80],
+                "content": re.sub(r"\s+", " ", str(content)).strip()[:520],
+                "createdAt": item.get("created_at") or item.get("createdAt") or "",
+                "noteType": item.get("note_type") or item.get("type") or "",
+            }
+        )
+    return normalized
+
+
+def getnote_recall(query, top_k=6, topic_id=""):
+    query = re.sub(r"\s+", " ", str(query or "")).strip()
+    if not query:
+        return {"ok": False, "message": "检索词为空", "results": [], "status": getnote_public_status()}
+    try:
+        top_k = max(1, min(10, int(top_k or 6)))
+    except Exception:
+        top_k = 6
+    path = "/resource/recall/knowledge" if topic_id else "/resource/recall"
+    payload = {"query": query, "top_k": top_k}
+    if topic_id:
+        payload["topic_id"] = str(topic_id)
+    res = getnote_request("POST", path, payload=payload)
+    if not res.get("ok"):
+        return {**res, "results": [], "status": getnote_public_status()}
+    data = res.get("data") or {}
+    if data.get("success") is False:
+        err = data.get("error") or {}
+        return {
+            "ok": False,
+            "message": err.get("message") or err.get("reason") or "得到大脑检索失败",
+            "results": [],
+            "status": getnote_public_status(),
+        }
+    return {
+        "ok": True,
+        "query": query,
+        "results": normalize_getnote_results(data),
+        "status": getnote_public_status(),
+    }
 
 
 class ImageParser(HTMLParser):
@@ -1136,6 +1250,34 @@ class Handler(SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
+        if parsed.path == "/api/dedao/status":
+            status = getnote_public_status()
+            if status["configured"]:
+                probe = getnote_request("GET", "/resource/knowledge/list", params={"page": 1}, timeout=10)
+                status["reachable"] = bool(probe.get("ok"))
+                if not probe.get("ok"):
+                    status["message"] = probe.get("message") or "得到大脑连接失败"
+                else:
+                    data = probe.get("data") or {}
+                    topics = ((data.get("data") or {}).get("topics") or []) if isinstance(data, dict) else []
+                    status["knowledgeCount"] = len(topics)
+                    status["knowledge"] = [
+                        {
+                            "topicId": str(x.get("topic_id") or x.get("id") or ""),
+                            "name": x.get("name") or "未命名知识库",
+                            "description": x.get("description") or "",
+                        }
+                        for x in topics[:20]
+                        if isinstance(x, dict)
+                    ]
+            body = json.dumps(status, ensure_ascii=False).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if parsed.path == "/":
             self.path = "/index.html"
         super().do_GET()
@@ -1190,6 +1332,23 @@ class Handler(SimpleHTTPRequestHandler):
         if parsed.path == "/api/viral-analyze":
             payload = read_json_body(self)
             body = json.dumps(local_viral_analysis(payload.get("url", "")), ensure_ascii=False).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if parsed.path == "/api/dedao-recall":
+            payload = read_json_body(self)
+            body = json.dumps(
+                getnote_recall(
+                    payload.get("query", ""),
+                    payload.get("top_k", 6),
+                    payload.get("topic_id") or payload.get("topicId") or "",
+                ),
+                ensure_ascii=False,
+            ).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Cache-Control", "no-store")
