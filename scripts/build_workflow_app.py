@@ -46,6 +46,9 @@ def render(rows):
         "videos": rows,
         "generatedAt": datetime.now().strftime("%Y-%m-%d %H:%M"),
         "pillars": [
+            "AI超级个体内容管理",
+            "AI内容工作台/短视频工作流",
+            "智能体提效/内容自动化",
             "追星心理/理想自我",
             "边界感/反讨好",
             "女性成长/自我觉醒",
@@ -54,6 +57,11 @@ def render(rows):
             "文学哲思/独处",
         ],
         "painPoints": [
+            "内容越做越乱，不知道怎么把热点、选题、文案和复盘连成一套流程",
+            "每天临时想选题，发完作品也不知道下一条怎么优化",
+            "采集了很多作品和热点，却不会变成自己的口播文案",
+            "想用 AI 做内容管理，但不知道该让 AI 先处理哪一步",
+            "有工具、有素材、有想法，但发布节奏一直不稳定",
             "讨好别人却丢了自己",
             "太敏感导致情绪内耗",
             "追星背后的理想自我投射",
@@ -1938,6 +1946,8 @@ cd /Users/a001/Documents/抖音工作流
       $('#draftTheme').innerHTML = '<option value="">自动判断主题</option>' + themes.map(t=>`<option>${{esc(t)}}</option>`).join('');
       $('#ideaTheme').innerHTML = '<option value="">不套用预设，使用手动输入</option>' + themes.map(t=>`<option>${{esc(t)}}</option>`).join('');
       $('#ideaPain').innerHTML = '<option value="">不套用预设，使用手动输入</option>' + state.painPoints.map(p=>`<option>${{esc(p)}}</option>`).join('');
+      if ([...$('#ideaTheme').options].some(option => option.value === 'AI超级个体内容管理')) $('#ideaTheme').value = 'AI超级个体内容管理';
+      if ([...$('#ideaPain').options].some(option => option.value === '内容越做越乱，不知道怎么把热点、选题、文案和复盘连成一套流程')) $('#ideaPain').value = '内容越做越乱，不知道怎么把热点、选题、文案和复盘连成一套流程';
       const hookOptions = hookFormulas.map(f=>`<option value="${{esc(f.id)}}">${{esc(f.name)}}｜${{esc(f.use)}}</option>`).join('');
       ['draftHook','ideaHook'].forEach(sel => {{
         const el = $('#' + sel);
@@ -1948,11 +1958,11 @@ cd /Users/a001/Documents/抖音工作流
     }}
 
     function selectedIdeaTheme() {{
-      return ($('#ideaThemeCustom')?.value || '').trim() || $('#ideaTheme').value || 'AI超级个体/个人品牌';
+      return ($('#ideaThemeCustom')?.value || '').trim() || $('#ideaTheme').value || 'AI超级个体内容管理';
     }}
 
     function selectedIdeaPain() {{
-      return ($('#ideaPainCustom')?.value || '').trim() || $('#ideaPain').value || '想做账号但不知道怎么建立信任';
+      return ($('#ideaPainCustom')?.value || '').trim() || $('#ideaPain').value || '内容越做越乱，不知道怎么把热点、选题、文案和复盘连成一套流程';
     }}
 
     function selectedIdeaHot() {{
@@ -2226,6 +2236,21 @@ cd /Users/a001/Documents/抖音工作流
       '把经验变成内容，把内容变成信任，把信任变成成交'
     ];
 
+    const aiSuperTopicTemplates = [
+      '{{theme}}别再靠灵感，先搭一条内容流水线',
+      '把内容混乱变成每天能执行的工作台',
+      'AI 超级个体不是多发作品，而是先管好素材入口',
+      '一条抖音热点，怎样变成 3 条能发的口播',
+      '{{theme}}的第一步：把采集、选题、文案、复盘分开',
+      '别再临时想标题，先做你的选题资产库',
+      '用 AI 管内容，最该先自动化的是这一步',
+      '内容越做越乱，说明你缺的不是工具，是流程',
+      '一个人做账号，怎样把每天的内容生产稳定下来',
+      '把爆款拆解变成自己的选题，不要再只收藏',
+      '发布前 10 分钟，先用这张检查表过一遍',
+      '未来 7 天怎么发，先从你的旧作品里找答案'
+    ];
+
     function cleanTopic(topic) {{
       return String(topic || '').replace(/^\\d+[.、]\\s*/, '').replace(/｜.*/, '').trim();
     }}
@@ -2242,6 +2267,11 @@ cd /Users/a001/Documents/抖音工作流
       const hay = `${{theme}} ${{pain}} ${{topic}}`;
       if (isCareerTheme(theme, hay)) return 'content_business';
       return detectViralDomain(hay);
+    }}
+
+    function isAISuperContentTheme(theme='', pain='') {{
+      const hay = `${{theme}} ${{pain}}`;
+      return /AI\\s*超级个体|超级个体内容管理|AI内容工作台|短视频工作流|内容工作台|内容管理|智能体提效|内容自动化|工作流/.test(hay);
     }}
 
     function ideaVariantPlan(clean, theme, pain, variant=0) {{
@@ -2359,6 +2389,151 @@ cd /Users/a001/Documents/抖音工作流
       }};
     }}
 
+    function aiSuperWorkflowPlan(clean, theme, pain, variant=0) {{
+      const seed = ideaSeed(`${{clean}}|${{theme}}|${{pain}}|ai-super|${{variant}}`);
+      const plans = [
+        {{
+          angle:'素材入口',
+          title:'别再临时找选题，先把素材入口管起来',
+          scene:'你刷到热点、同行作品、评论区问题，第一反应都是先收藏，可真正要发的时候，素材散在截图、收藏夹和脑子里，根本拿不出来',
+          first:'把所有素材先分进三个盒子：正在被讨论、用户原话、我能给的方法',
+          steps:['把抖音热点放进“正在被讨论”','把评论和私信放进“用户原话”','把你的经验放进“我能给的方法”'],
+          proof:'比如你今天看到一个热点，不要马上写标题，先问自己：这个热点里用户正在担心什么，我能不能给他一个更省力的做法',
+          closer:'今天先别急着写新稿，先把最近 20 条素材按这三个盒子分好，你会立刻发现选题不再是凭感觉硬憋出来的',
+          cover:['先管素材','别靠灵感','三盒分类']
+        }},
+        {{
+          angle:'选题库',
+          title:'你的选题库不能只存标题，要存用户下一步',
+          scene:'很多人做了一个选题表，里面全是标题，可一到写文案就卡住，因为标题后面没有场景、痛点和行动',
+          first:'每个选题都要补齐四列：谁在焦虑、卡在哪一步、我给什么动作、看完怎么互动',
+          steps:['写具体人群，不写泛泛的大众','写他当下卡住的真实动作','写你能给他的一个小步骤'],
+          proof:'比如“AI 内容管理”这个方向，不要只写“怎么做内容”，要写“每天临时想选题的人，先用一张表把热点、痛点和旧作品连起来”',
+          closer:'你把这四列补齐以后，AI 才不是替你乱写，而是在你的规则里帮你把半成品变成成品',
+          cover:['选题别空','补齐四列','直接能写']
+        }},
+        {{
+          angle:'脚本工厂',
+          title:'口播稿不要从空白页开始，要从固定工位开始',
+          scene:'你打开文档准备写稿，脑子里一片空白，最后不是写得很散，就是又回到老一套表达',
+          first:'把口播工位固定成四步：一句判断、一个场景、三个动作、一个问题',
+          steps:['直接给判断，不铺垫','放一个用户正在经历的画面','给三个马上能做的动作'],
+          proof:'你要写“发布节奏不稳定”，就别先讲理论，先说：你不是没素材，是没有把素材排进明天、后天和下周的内容位置里',
+          closer:'以后每次写稿都先过这四步，AI 只负责扩写和润色，主线必须由你的工作流决定',
+          cover:['别空白写','四步成稿','马上能念']
+        }},
+        {{
+          angle:'封面标题',
+          title:'封面和标题不能分开想，要一起过同一个承诺',
+          scene:'有些作品文案很好，但封面像情绪口号，标题像随手一写，用户点开前根本不知道能得到什么',
+          first:'先写一句内容承诺，再把它拆成封面三行字和标题关键词',
+          steps:['封面第一行写用户正在卡住的动作','第二行写你给的结果','第三行写今天照做的入口'],
+          proof:'比如“内容越做越乱”，封面可以写“内容太乱了 / 先建工作台 / 今天就能分好”，标题再承接具体做法',
+          closer:'这样做的好处是，用户没点开之前就知道你要解决什么，点开以后也不会觉得标题和正文断开',
+          cover:['封面先承诺','标题接结果','别各写各的']
+        }},
+        {{
+          angle:'复盘表',
+          title:'复盘不是看播放量高不高，是找下一条怎么改',
+          scene:'很多人发完就盯着播放量，数据一低就焦虑，数据一高也不知道为什么高，下一条还是从零开始',
+          first:'每条作品发完只看四个问题：开头有没有停住人，中段有没有推进，评论有没有暴露痛点，下一条接什么',
+          steps:['把播放量当成入口信号，不当成情绪判决','把评论区原话复制进痛点库','把表现好的句子存进标题和封面库'],
+          proof:'如果一条作品评论里反复出现“我就是不知道怎么开始”，下一条就不要再讲大方向，直接做“第一步怎么做”',
+          closer:'你这样复盘 7 天，工作台里就会长出自己的内容地图，而不是每天被数据牵着情绪走',
+          cover:['别只看播放','复盘找下一条','数据变选题']
+        }},
+        {{
+          angle:'发布日历',
+          title:'未来 7 天不要随便发，要让每一条接住上一条',
+          scene:'你今天发热点，明天发感悟，后天发工具，用户看了三天还是不知道你到底在帮他完成什么',
+          first:'把 7 天内容排成一条线：问题、误区、方法、案例、工具、清单、复盘',
+          steps:['第一天只讲用户最痛的场景','第二天拆一个常见误区','第三天给一个能照做的方法'],
+          proof:'比如你做 AI 内容管理，第一天讲素材太乱，第二天讲为什么收藏没用，第三天教三盒分类法，后面再接脚本、封面和复盘',
+          closer:'这样用户不是随机刷到你，而是连续看见你在帮他把一个问题往前推',
+          cover:['7天别乱发','一条线推进','越看越清楚']
+        }},
+        {{
+          angle:'AI分工',
+          title:'AI 不是替你想方向，是替你处理重复工序',
+          scene:'你把所有问题都丢给 AI，让它直接给选题、标题、文案、封面，结果看起来完整，但一点都不像你的账号',
+          first:'先把 AI 分成三个岗位：资料整理员、口播助理、复盘记录员',
+          steps:['资料整理员只负责把素材分类','口播助理只负责把你的观点扩成口语稿','复盘记录员只负责从数据里提下一条选题'],
+          proof:'你给 AI 的任务越具体，它越像团队；你给它一个大而空的问题，它就只能给你一堆看起来正确的套话',
+          closer:'从今天开始，别再问 AI “帮我写一个爆款”，改成“把这 5 条素材整理成 3 个可发布选题”',
+          cover:['AI先分工','别问大问题','一岗一任务']
+        }},
+        {{
+          angle:'旧作品再生产',
+          title:'你的旧作品不是过去式，是下一轮选题原料',
+          scene:'很多人一条作品发完就放过去了，其实真正值钱的东西在旧作品里：哪句话有人停留，哪类评论最多，哪个封面没人点',
+          first:'把旧作品拆成三类：能复刻、要重写、该淘汰',
+          steps:['能复刻的作品保留开头和选题方向','要重写的作品换标题、封面和前 3 秒','该淘汰的作品只留下用户问题'],
+          proof:'如果旧作品观点不错但播放低，不要马上否定主题，先检查是不是封面没有说清结果，或者开头太慢',
+          closer:'旧作品复盘一次，往往能生出三条新内容，这比每天盲目找热点稳定得多',
+          cover:['旧作品别扔','一条变三条','复盘再生产']
+        }}
+      ];
+      const base = plans[variant % plans.length];
+      return {{ ...base, seed, badge: pickSeed(['采集台','选题库','脚本工厂','封面库','复盘表','发布日历','AI分工','旧作品库'], seed, 0) }};
+    }}
+
+    function aiSuperTopicPackage(idea, rawTopic, baseClean, suffixLabel, theme, pain) {{
+      const clean = suffixLabel ? `${{baseClean}}（${{suffixLabel}}）` : baseClean;
+      const themeName = theme.split('/')[0] || 'AI超级个体内容管理';
+      const variant = Number(idea.variant || 0);
+      const hot = idea.hot || selectedIdeaHot();
+      const hotTitle = hot?.title || '';
+      const hotSummary = hotSummaryLine(hot);
+      const hotMeta = hotMetaLine(hot);
+      const viralCase = currentViralArchive();
+      const plan = aiSuperWorkflowPlan(clean, theme, pain, variant);
+      const formula = {{
+        id:'ai-workbench-direct',
+        name:'AI工作台口播开场',
+        pattern:'真实卡点 + 当前场景 + 立刻能做的工作流'
+      }};
+      const openings = [
+        `如果你想做${{themeName}}，先别再问今天发什么。真正拖住你的，是${{pain}}。`,
+        `我越来越确定，一人做内容最怕的不是没工具，而是${{pain}}。`,
+        `你以为做${{themeName}}靠的是灵感，其实靠的是一套每天能跑起来的流程。`,
+        `今天这段话，送给所有素材很多、工具很多，但发内容还是很乱的人。`
+      ];
+      const hotLine = hotTitle
+        ? `拿今天抖音热榜的「${{hotTitle}}」举例。${{hotMeta ? `它现在是${{hotMeta}}。` : ''}}${{hotSummary ? `公开信息里能看到：${{hotSummary}}` : ''}}你别急着把它塞进标题，先看它背后用户正在关心什么，再决定它能不能进入你的选题库。`
+        : '';
+      const caseLine = viralCase
+        ? `如果你手里已经归档过爆款案例，今天不要照搬它的句子，只保留它让人停下来的节奏，然后换成你自己的用户问题和工作台流程。`
+        : '';
+      const steps = plan.steps.map(step => String(step).replace(/^第[一二三四五六七八九十]+[，、]/, '').trim());
+      const script = [
+        openings[variant % openings.length],
+        hotLine,
+        caseLine,
+        `我建议你从「${{plan.angle}}」开始。${{plan.scene}}。`,
+        `${{plan.first}}。这一步听起来简单，但它会直接决定你后面写出来的是一条临时文案，还是一套可以反复生产的内容系统。`,
+        `你今天就按这三步做。第一，${{steps[0]}}。第二，${{steps[1]}}。第三，${{steps[2]}}。`,
+        `${{plan.proof}}。你看，真正有用的 AI 内容管理，不是让 AI 替你胡乱发挥，而是把你的素材、判断和标准交代清楚，让它帮你把半成品推进到可发布。`,
+        `这里最关键的一点是：每个格子只放一种任务。素材格只放事实和原话，选题格只判断值不值得讲，文案格只负责变成能念出口的句子，复盘格只回答下一条该改哪里。你一混在一起，AI 就会开始给你套话；你一分清楚，AI 才能真的变成你的内容助理。`,
+        `如果你今天只有 30 分钟，也不要从写完整文案开始。先打开工作台，选一个素材，补一句用户原话，再写一个你能给的动作。只要这三项齐了，一条口播就已经有骨架了，后面再让 AI 帮你扩成自然表达。`,
+        `不要追求第一天就把系统搭得很复杂。你只要保证每一条内容都能留下一个素材、一个判断、一个动作和一个复盘结论，你的工作台就会越用越准，下一条内容也会越来越省力。`,
+        `这也是 AI 超级个体和普通内容创作者最大的区别：别人是在每天临时找感觉，你是在让每一次采集、每一次生成、每一次发布，都回到同一套系统里继续生长。`,
+        `等这套流程跑起来，你每天要做的就不是从零开始想文案，而是打开工作台，看素材在哪一格，选题缺哪一列，口播差哪一步，发布后下一条接哪里。`,
+        `${{plan.closer}}。如果你现在也想把内容工作台搭起来，评论区告诉我：你最乱的是素材、选题、文案，还是复盘？`
+      ].filter(Boolean).join('\\n\\n');
+      const titles = [
+        clean,
+        plan.title,
+        hotTitle ? `别硬蹭${{hotTitle}}，先放进内容工作台` : `${{themeName}}先搭${{plan.badge}}`,
+        `${{pain.slice(0, 18)}}，先做${{plan.angle}}`
+      ];
+      const cover = [
+        safeClip(plan.cover[0], 10),
+        safeClip(plan.cover[1], 10),
+        safeClip(plan.cover[2], 10)
+      ];
+      return {{ title: clean, titles: titles.slice(0,4), cover, script, theme, pain, formula, viralCase, hot, aiMode:true, angle:plan.angle, domain:'ai_super_workbench' }};
+    }}
+
     function topicPackage(topicOrIdea, theme, pain) {{
       const idea = typeof topicOrIdea === 'object' ? topicOrIdea : {{ topic:topicOrIdea, theme, pain, variant:0 }};
       const rawTopic = String(idea.topic || '');
@@ -2367,6 +2542,9 @@ cd /Users/a001/Documents/抖音工作流
       const clean = suffixLabel ? `${{baseClean}}（${{suffixLabel}}）` : baseClean;
       theme = idea.theme || theme || selectedIdeaTheme();
       pain = idea.pain || pain || selectedIdeaPain();
+      if (isAISuperContentTheme(theme, pain)) {{
+        return aiSuperTopicPackage(idea, rawTopic, baseClean, suffixLabel, theme, pain);
+      }}
       const themeName = theme.split('/')[0] || theme;
       const painCore = pain.replace('的人', '').replace('导致', '').replace('却', '，却');
       const formula = hookById($('#ideaHook')?.value || currentHookId());
@@ -2520,21 +2698,24 @@ cd /Users/a001/Documents/抖音工作流
       const count = Number($('#ideaCount').value);
       syncHookSelects($('#ideaHook').value);
       const viralCase = currentViralArchive();
-      const careerMode = isCareerTheme(theme, pain);
+      const aiSuperMode = isAISuperContentTheme(theme, pain);
+      const careerMode = !aiSuperMode && isCareerTheme(theme, pain);
       const hot = selectedIdeaHot();
-      const templates = careerMode ? careerTopicTemplates : topicTemplates;
+      const templates = aiSuperMode ? aiSuperTopicTemplates : careerMode ? careerTopicTemplates : topicTemplates;
       const rows = [];
       for (let i=0;i<count;i++) {{
         const base = templates[i % templates.length].replaceAll('{{pain}}', pain).replaceAll('{{theme}}', theme.split('/')[0]);
         const suffixPool = viralCase
           ? ['｜爆款同构','｜外部案例复刻','｜高互动结构','｜封面反差','｜评论区入口']
+          : aiSuperMode
+            ? ['｜采集台','｜选题库','｜脚本工厂','｜封面标题','｜复盘表','｜发布日历','｜AI分工','｜旧作品库']
           : careerMode
             ? ['｜个人品牌','｜信任资产','｜内容定位','｜AI超级个体','｜成交路径']
             : ['｜热点切入','｜实操方法','｜案例拆解','｜避坑清单','｜行动方案'];
         const suffix = suffixPool[i % suffixPool.length];
         const topic = `${{i+1}}. ${{base}}${{suffix}}`;
-        const plan = ideaVariantPlan(`${{cleanTopic(topic)}} ${{hot?.title || ''}}`, theme, pain, i);
-        rows.push({{ topic, theme, pain, hot, variant:i, angle:plan.angle, domain:plan.domain }});
+        const plan = aiSuperMode ? aiSuperWorkflowPlan(cleanTopic(topic), theme, pain, i) : ideaVariantPlan(`${{cleanTopic(topic)}} ${{hot?.title || ''}}`, theme, pain, i);
+        rows.push({{ topic, theme, pain, hot, variant:i, angle:plan.angle, domain:aiSuperMode ? 'ai_super_workbench' : plan.domain }});
       }}
       state.currentIdeas = rows;
       $('#ideasResult').innerHTML = rows.map((x,i)=>`
