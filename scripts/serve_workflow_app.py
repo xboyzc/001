@@ -10,6 +10,7 @@ from html import unescape
 from html.parser import HTMLParser
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from socketserver import TCPServer
 from urllib.parse import parse_qs, quote, urljoin, urlparse
 from urllib.request import Request, urlopen
 
@@ -62,6 +63,15 @@ def load_config():
 
 
 CONFIG = load_config()
+
+
+class FastThreadingHTTPServer(ThreadingHTTPServer):
+    def server_bind(self):
+        # ThreadingHTTPServer normally calls socket.getfqdn(), which can block
+        # on reverse DNS for 0.0.0.0 on some local networks.
+        TCPServer.server_bind(self)
+        self.server_name = HOST
+        self.server_port = self.server_address[1]
 
 
 def is_local_client(address):
@@ -1192,7 +1202,7 @@ class Handler(SimpleHTTPRequestHandler):
 
 def main():
     APP_DIR.mkdir(parents=True, exist_ok=True)
-    server = ThreadingHTTPServer((HOST, PORT), Handler)
+    server = FastThreadingHTTPServer((HOST, PORT), Handler)
     print(f"http://127.0.0.1:{PORT}/?key={CONFIG['access_key']}")
     print(f"Listening on {HOST}:{PORT}")
     server.serve_forever()
