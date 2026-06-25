@@ -218,6 +218,28 @@ def render(rows):
     .result {{ border:1px solid var(--line); background:rgba(255,255,255,.045); border-radius:12px; padding:13px; line-height:1.65; }}
     .danao-ref {{ border-color:rgba(34,211,238,.34); background:linear-gradient(135deg, rgba(34,211,238,.10), rgba(167,139,250,.08)); }}
     .result b {{ color:var(--active); }}
+    .teleprompter-pack {{
+      border:1px solid rgba(52,211,153,.46); border-radius:16px; padding:16px;
+      background:linear-gradient(180deg, rgba(52,211,153,.12), rgba(6,10,20,.55));
+      box-shadow:0 0 34px rgba(52,211,153,.10);
+    }}
+    .teleprompter-head {{ display:flex; justify-content:space-between; gap:12px; align-items:flex-start; margin-bottom:12px; }}
+    .teleprompter-label {{ display:inline-flex; align-items:center; gap:7px; color:#bfffe6; font-size:12px; font-weight:900; letter-spacing:.08em; }}
+    .teleprompter-label:before {{ content:""; width:9px; height:9px; border-radius:50%; background:var(--green); box-shadow:0 0 16px var(--green); }}
+    .teleprompter-title {{ margin-top:6px; color:#fff; font-size:18px; font-weight:950; line-height:1.35; }}
+    .teleprompter-copy {{ white-space:nowrap; font-weight:900; }}
+    .teleprompter-box {{
+      min-height:240px; max-height:520px; overflow:auto; white-space:pre-wrap; line-height:1.9;
+      color:#f8fffb; font-size:16px; padding:18px; border-radius:14px;
+      border:1px solid rgba(52,211,153,.34); background:rgba(3,10,12,.70);
+    }}
+    .reference-pack {{
+      margin-top:14px; border:1px solid rgba(145,163,186,.22); border-radius:16px; padding:14px;
+      background:rgba(255,255,255,.028);
+    }}
+    .reference-head {{ display:flex; justify-content:space-between; gap:12px; align-items:center; margin-bottom:10px; }}
+    .reference-head b {{ color:#dbeafe; }}
+    .reference-grid {{ display:grid; gap:10px; }}
     .formula-grid {{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }}
     .formula-card {{ border:1px solid var(--line); background:rgba(255,255,255,.045); border-radius:12px; padding:12px; }}
     .formula-card strong {{ display:block; color:#fff; margin-bottom:6px; }}
@@ -2927,7 +2949,8 @@ cd /Users/a001/Documents/抖音工作流
       const pack = topicPackage(item);
       const packHotMeta = hotMetaLine(pack.hot);
       const packHotSummary = hotSummaryLine(pack.hot);
-      const copyText = [
+      const teleprompterText = String(pack.script || '').trim();
+      const materialText = [
         '【选题】' + pack.title,
         '',
         pack.hot ? `【抖音新闻热点】${{pack.hot.title}}（${{pack.hot.source || '抖音热搜'}}）` : '',
@@ -2941,38 +2964,65 @@ cd /Users/a001/Documents/抖音工作流
         pack.cover.join(' / '),
         '',
         '【文字稿】',
-        pack.script
+        teleprompterText
       ].join('\\n');
-      $('#ideaPackage').dataset.copy = copyText;
+      $('#ideaPackage').dataset.copy = teleprompterText;
+      $('#ideaPackage').dataset.script = teleprompterText;
+      $('#ideaPackage').dataset.title = pack.title;
+      $('#ideaPackage').dataset.materials = materialText;
       $('#ideaPackage').innerHTML = `
-        <div class="result">
-          <div class="script-title">${{esc(pack.title)}}</div>
-          <span class="chip theme-chip">${{esc(pack.theme)}}</span>
-          <span class="chip">${{esc(pack.pain)}}</span>
-        </div>
-        <div class="result"><b>自动套用钩子：</b>${{esc(pack.formula.name)}}<br><span class="muted">${{esc(pack.formula.pattern)}}</span></div>
-        ${{pack.hot ? `<div class="result"><b>结合抖音热点：</b>${{esc(pack.hot.title)}}<br><span class="muted">${{esc(pack.hot.source || '抖音热搜')}}${{packHotMeta ? ' · ' + esc(packHotMeta) : ''}}</span>${{packHotSummary ? `<div class="muted" style="margin-top:6px">${{esc(packHotSummary)}}</div>` : ''}}</div>` : ''}}
-        ${{pack.viralCase ? `<div class="result"><b>套用爆款案例：</b>${{esc(pack.viralCase.title)}}<br><span class="muted">${{esc(pack.viralCase.source)}} · 爆款潜力 ${{pack.viralCase.avg}}</span></div>` : ''}}
-        ${{renderDedaoBrainReference('确定选题后的文稿生成', pack.memory, 4)}}
-        ${{renderDanaoReference('选题生成器', 3)}}
-        <div class="result"><b>标题方案：</b><br>${{pack.titles.map((t,i)=>`${{i+1}}. ${{esc(t)}}`).join('<br>')}}</div>
-        <div class="cover">${{esc(pack.cover.join(' / '))}}</div>
-        <div class="result"><b>文字稿：</b><div class="copybox">${{esc(pack.script)}}</div></div>
-        <div class="actions">
-          <button class="primary" onclick="copyIdeaPackage()">复制整套素材</button>
-          <button class="secondary" onclick="sendIdeaToOptimizer()">拿去继续优化</button>
-        </div>`;
+        <section class="teleprompter-pack">
+          <div class="teleprompter-head">
+            <div>
+              <div class="teleprompter-label">提词器口播正文</div>
+              <div class="teleprompter-title">${{esc(pack.title)}}</div>
+              <div class="muted">下面只保留可直接口播的正文，不包含来源、提示、分析或核对信息。</div>
+            </div>
+            <button class="primary teleprompter-copy" onclick="copyIdeaScript()">复制口播文稿</button>
+          </div>
+          <div class="teleprompter-box">${{esc(teleprompterText)}}</div>
+        </section>
+        <section class="reference-pack">
+          <div class="reference-head">
+            <b>生成依据与核对来源</b>
+            <span class="muted">这些内容只用于检查和继续优化，不进入提词器正文。</span>
+          </div>
+          <div class="reference-grid">
+            <div class="result">
+              <b>当前选题：</b>${{esc(pack.title)}}<br>
+              <span class="chip theme-chip">${{esc(pack.theme)}}</span>
+              <span class="chip">${{esc(pack.pain)}}</span>
+            </div>
+            <div class="result"><b>标题方案：</b><br>${{pack.titles.map((t,i)=>`${{i+1}}. ${{esc(t)}}`).join('<br>')}}</div>
+            <div class="cover">${{esc(pack.cover.join(' / '))}}</div>
+            <div class="result"><b>自动套用钩子：</b>${{esc(pack.formula.name)}}<br><span class="muted">${{esc(pack.formula.pattern)}}</span></div>
+            ${{pack.hot ? `<div class="result"><b>结合抖音热点：</b>${{esc(pack.hot.title)}}<br><span class="muted">${{esc(pack.hot.source || '抖音热搜')}}${{packHotMeta ? ' · ' + esc(packHotMeta) : ''}}</span>${{packHotSummary ? `<div class="muted" style="margin-top:6px">${{esc(packHotSummary)}}</div>` : ''}}</div>` : ''}}
+            ${{pack.viralCase ? `<div class="result"><b>套用爆款案例：</b>${{esc(pack.viralCase.title)}}<br><span class="muted">${{esc(pack.viralCase.source)}} · 爆款潜力 ${{pack.viralCase.avg}}</span></div>` : ''}}
+            ${{renderDedaoBrainReference('确定选题后的文稿生成', pack.memory, 4)}}
+            ${{renderDanaoReference('选题生成器', 3)}}
+          </div>
+          <div class="actions">
+            <button class="secondary" onclick="copyIdeaMaterials()">复制标题封面素材</button>
+            <button class="secondary" onclick="sendIdeaToOptimizer()">拿去继续优化</button>
+          </div>
+        </section>`;
     }}
     window.renderIdeaPackage = renderIdeaPackage;
 
-    window.copyIdeaPackage = async function() {{
-      await navigator.clipboard.writeText($('#ideaPackage').dataset.copy || '');
+    window.copyIdeaScript = async function() {{
+      await navigator.clipboard.writeText($('#ideaPackage').dataset.script || $('#ideaPackage').dataset.copy || '');
+    }}
+
+    window.copyIdeaPackage = window.copyIdeaScript;
+
+    window.copyIdeaMaterials = async function() {{
+      await navigator.clipboard.writeText($('#ideaPackage').dataset.materials || '');
     }}
 
     window.sendIdeaToOptimizer = function() {{
-      const text = $('#ideaPackage').dataset.copy || '';
-      const title = text.match(/【选题】(.+)/)?.[1] || '';
-      const script = text.split('【文字稿】')[1]?.trim() || '';
+      const box = $('#ideaPackage');
+      const title = box.dataset.title || '';
+      const script = box.dataset.script || box.dataset.copy || '';
       $('#draftTitle').value = title;
       $('#draftText').value = script;
       const theme = selectedIdeaTheme();
