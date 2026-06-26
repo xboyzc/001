@@ -642,6 +642,8 @@ cd /Users/a001/Documents/抖音工作流
 
   <script>
     const state = {json_for_html(data)};
+    state.ideaGenerationSeq = 0;
+    state.ideaPackageSeq = 0;
 
     const $ = (sel) => document.querySelector(sel);
     const $$ = (sel) => [...document.querySelectorAll(sel)];
@@ -704,8 +706,18 @@ cd /Users/a001/Documents/抖音工作流
       return (memory?.results || state.dedaoBrain?.current?.results || []).filter(x => x && (x.title || x.content));
     }}
 
+    function dedaoUniqueItems(memory) {{
+      const seen = new Set();
+      return dedaoItems(memory).filter(item => {{
+        const key = `${{item.title || ''}}|${{String(item.content || '').slice(0, 80)}}`.replace(/\\s+/g, '');
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      }});
+    }}
+
     function renderDedaoBrainReference(area, memory, limit=4) {{
-      const items = dedaoItems(memory).slice(0, limit);
+      const items = dedaoUniqueItems(memory).slice(0, limit);
       const status = state.dedaoBrain?.status;
       if (!items.length) {{
         const note = status?.configured === false
@@ -785,19 +797,31 @@ cd /Users/a001/Documents/抖音工作流
       }}
     }}
 
-    function dedaoBrainLine(memory, theme, pain, clean, careerMode=false) {{
-      const items = dedaoItems(memory);
+    function dedaoBrainLine(memory, theme, pain, clean, careerMode=false, variant=0) {{
+      const items = dedaoUniqueItems(memory);
       if (!items.length) return '';
-      const first = items[0];
-      const second = items[1];
+      const offset = Math.abs(Number(variant) || 0);
+      const first = items[offset % items.length];
+      const second = items[(offset + 1) % items.length];
       const point = dedaoCleanPoint(first);
       const supportRaw = second ? dedaoCleanPoint(second) : '';
       const support = supportRaw && supportRaw !== point ? supportRaw : '';
       const themeName = theme.split('/')[0] || theme;
       if (careerMode) {{
-        return `做${{themeName}}时，用户真正关心的不是你讲了多少方法，而是你能不能把「${{point || '能力、对象和结果'}}」变成他今天能看见的入口、动作和结果。${{support ? `这件事还可以继续往前推：${{support}}。` : ''}}`;
+        const lines = [
+          `做${{themeName}}时，用户真正关心的不是你讲了多少方法，而是你能不能把「${{point || '能力、对象和结果'}}」变成他今天能看见的入口、动作和结果。`,
+          `这条内容最该抓住的不是大概念，而是「${{point || '一个清楚的服务入口'}}」。用户听懂这句话，才会知道你能帮他省掉哪一步。`,
+          `如果你想让别人记住你，先把「${{point || '你能解决的问题'}}」讲成一个真实场景，而不是一段自我介绍。`
+        ];
+        return `${{lines[offset % lines.length]}}${{support ? `这件事还可以继续往前推：${{support}}。` : ''}}`;
       }}
-      return `真正能让人停下来的，不是一个很大的道理，而是「${{point || '把问题放进真实场景，再给一个能马上做的小动作'}}」。你把场景说具体，把原因说清楚，再给一个今天能做的小动作，用户才会觉得这条内容跟自己有关。${{support ? `这件事还可以继续往前推：${{support}}。` : ''}}`;
+      const lines = [
+        `真正能让人停下来的，不是一个很大的道理，而是「${{point || '把问题放进真实场景，再给一个能马上做的小动作'}}」。你把场景说具体，用户才会觉得这条内容跟自己有关。`,
+        `今天可以先抓住「${{point || '一个具体卡点'}}」。只要这个卡点足够具体，后面的动作就不会变成空话。`,
+        `如果这条内容只讲观点，用户听完很快就会划走；把「${{point || '真实场景'}}」讲出来，他才知道自己现在该怎么动。`,
+        `把问题缩小到「${{point || '一个能立刻处理的动作'}}」，这条口播就会更像一句提醒，而不是一段道理。`
+      ];
+      return `${{lines[offset % lines.length]}}${{support ? `这件事还可以继续往前推：${{support}}。` : ''}}`;
     }}
 
     function cleanTeleprompterScript(text) {{
@@ -821,12 +845,12 @@ cd /Users/a001/Documents/抖音工作流
     }}
 
     function dedaoTopicBase(theme, pain, memory, index) {{
-      const items = dedaoItems(memory);
+      const items = dedaoUniqueItems(memory);
       if (!items.length || index % 3 !== 0) return '';
       const item = items[Math.floor(index / 3) % items.length];
       const title = safeClip(item.title || item.content || pain, 18);
       if (!title) return '';
-      return `${{theme.split('/')[0]}}：从得到大脑「${{title}}」延伸出的短视频选题`;
+      return `${{theme.split('/')[0]}}：把「${{title}}」讲成一条可发布口播`;
     }}
 
     function currentHookId() {{
@@ -2766,8 +2790,70 @@ cd /Users/a001/Documents/抖音工作流
           cover:['旧作品别扔','一条变三条','复盘再生产']
         }}
       ];
-      const base = plans[variant % plans.length];
+      const base = plans[Math.abs(Number(variant || 0)) % plans.length];
       return {{ ...base, seed, badge: pickSeed(['采集台','选题库','脚本工厂','封面库','复盘表','发布日历','AI分工','旧作品库'], seed, 0) }};
+    }}
+
+    function memoryOralLine(memory, fallback, variant=0) {{
+      const items = dedaoUniqueItems(memory);
+      if (!items.length) return '';
+      const point = dedaoCleanPoint(items[variant % items.length]);
+      if (!point) return '';
+      const patterns = [
+        `你可以先抓住这个判断：${{point}}。它能帮你把今天的问题缩小到一个具体动作里。`,
+        `有一个切口很适合放进今天的话题：${{point}}。先让用户听懂自己的卡点，他才愿意继续往下听。`,
+        `如果你不知道从哪里开始，就先看这一点：${{point}}。它能把一个很大的话题拉回到真实场景里。`,
+        `今天最值得留下的不是概念，而是这个切口：${{point}}。切口越小，口播越容易讲得清楚。`
+      ];
+      return patterns[Math.abs(Number(variant) || 0) % patterns.length] || fallback || '';
+    }}
+
+    function aiSuperScriptParagraphs(plan, clean, themeName, pain, hotLine, caseLine, memoryLine, variant=0) {{
+      const steps = plan.steps.map(step => String(step).replace(/^第[一二三四五六七八九十]+[，、]/, '').trim());
+      const styles = [
+        [
+          `如果你的内容越做越乱，先别急着再找新工具。你真正缺的，可能是把「${{clean}}」放进一个稳定流程里。`,
+          hotLine,
+          caseLine,
+          memoryLine,
+          `就拿「${{plan.angle}}」来说。${{plan.scene}}。这种乱不是你不努力，而是素材进来以后没有固定位置。`,
+          `${{plan.first}}。第一步，${{steps[0]}}；第二步，${{steps[1]}}；第三步，${{steps[2]}}。`,
+          `${{plan.proof}}。你会发现，只要入口清楚，口播就不用每次从空白页开始。`,
+          `${{plan.closer}}。如果你现在也卡在${{pain}}，先把今天最乱的那一部分放进这个流程里。`
+        ],
+        [
+          `你做${{themeName}}时，最容易被拖住的不是写不出，而是每个环节都在临时决定。`,
+          hotLine,
+          memoryLine,
+          `今天这条就只解决一个问题：${{plan.title}}。${{plan.scene}}。`,
+          `别把它想复杂，先做一个小版本：${{plan.first}}。`,
+          `然后按这个顺序往下走：${{steps[0]}}，${{steps[1]}}，${{steps[2]}}。`,
+          `${{plan.proof}}。这一步一旦跑通，下一条内容就不是重新想，而是在已有素材上继续推进。`,
+          `${{plan.closer}}。评论区告诉我，你现在最想先整理哪一块：素材、选题、脚本、封面，还是复盘？`
+        ],
+        [
+          `很多人做内容的问题，不是没有想法，是想法太多，最后每一条都像重新开始。`,
+          caseLine,
+          hotLine,
+          `所以这条「${{clean}}」不要讲成大方法，先讲成一个能马上执行的动作。`,
+          `${{plan.scene}}。这个时候最该做的不是继续收藏，而是${{plan.first}}。`,
+          `你可以今天就照这个顺序试一次：${{steps[0]}}；${{steps[1]}}；${{steps[2]}}。`,
+          memoryLine,
+          `${{plan.proof}}。只要这一步变成习惯，你的内容就会从临时发挥变成持续生产。`,
+          `${{plan.closer}}。如果你也想把账号做成系统，先从这一条开始。`
+        ],
+        [
+          `我建议你今天只盯住「${{plan.angle}}」这一件事。因为${{pain}}的时候，最怕一边焦虑一边到处补课。`,
+          hotLine,
+          `你先看自己的工作台：${{plan.scene}}。如果这个环节没顺，后面标题、封面、文案都会跟着乱。`,
+          memoryLine,
+          `${{plan.first}}。不要追求一次做完整，先把这个动作做出来。`,
+          `具体就三步：${{steps[0]}}；${{steps[1]}}；${{steps[2]}}。`,
+          `${{plan.proof}}。你不是缺更多灵感，你缺的是每个素材都能进入下一步的路径。`,
+          `${{plan.closer}}。今天先把这一步跑一遍，再决定下一条内容怎么发。`
+        ]
+      ];
+      return styles[Math.abs(Number(variant) || 0) % styles.length].filter(Boolean);
     }}
 
     function aiSuperTopicPackage(idea, rawTopic, baseClean, suffixLabel, theme, pain) {{
@@ -2800,23 +2886,8 @@ cd /Users/a001/Documents/抖音工作流
       const caseLine = viralCase
         ? `很多爆款表面看是标题厉害，其实背后都有同一个东西：它知道用户此刻最卡在哪里，也知道下一句该把人带到哪里。`
         : '';
-      const brainLine = dedaoBrainLine(memory, theme, pain, clean, true);
-      const steps = plan.steps.map(step => String(step).replace(/^第[一二三四五六七八九十]+[，、]/, '').trim());
-      const script = cleanTeleprompterScript([
-        openings[variant % openings.length],
-        hotLine,
-        caseLine,
-        brainLine,
-        `真正拉开差距的地方，是「${{plan.angle}}」。${{plan.scene}}。`,
-        `${{plan.first}}。这不是一个表格动作，而是一种内容生产方式：热点不再只是热点，评论不再只是评论，旧作品也不再只是过去发过的一条视频。它们会变成下一条口播的开头、场景、观点和结尾。`,
-        `一个能长期跑起来的内容系统，里面一定有三个东西：${{steps[0]}}，${{steps[1]}}，${{steps[2]}}。少了其中任何一个，文案都会变成临时发挥，看起来很努力，听起来却没有连续性。`,
-        `${{plan.proof}}。这就是 AI 内容管理真正有价值的地方：不是让 AI 替你说漂亮话，而是让每一个素材都能找到自己的位置，让每一个观点都能变成可发布的口播。`,
-        `你会发现，内容一旦进入工作台，创作就不再是“今天我有没有灵感”。它会变成一条很清楚的链路：用户正在讨论什么，你能补充什么判断，这个判断能不能变成一句好懂的话，发出去以后又能沉淀出什么新问题。`,
-        `所以 AI 超级个体不是工具用得多，而是一个人也能拥有一套内容生产系统。系统越清楚，文案越不像套话；复盘越稳定，下一条选题越不需要从零开始。`,
-        `这也是 AI 超级个体和普通内容创作者最大的区别：别人是在每天临时找感觉，你是在让每一次采集、每一次生成、每一次发布，都回到同一套系统里继续生长。`,
-        `当这套内容系统跑起来，选题会越来越准，文案会越来越像你，封面和标题也会越来越知道该承诺什么。到最后，你不是被热点推着走，而是能把热点、素材和旧作品，都变成你的下一条内容。`,
-        `如果你也想把内容从混乱变成系统，评论区告诉我：你现在最卡的是素材、选题、文案，还是复盘？`
-      ].filter(Boolean).join('\\n\\n'));
+      const memoryLine = memoryOralLine(memory, '', variant);
+      const script = cleanTeleprompterScript(aiSuperScriptParagraphs(plan, clean, themeName, pain, hotLine, caseLine, memoryLine, variant).join('\\n\\n'));
       const titles = [
         clean,
         plan.title,
@@ -2855,7 +2926,7 @@ cd /Users/a001/Documents/抖音工作流
       const plan = ideaVariantPlan(`${{clean}} ${{hotTitle}}`, theme, pain, variant);
       const voice = oralVariantProfile(clean, theme, pain, plan, variant, careerMode);
       const memory = idea.memory || state.dedaoBrain?.current || null;
-      const brainLine = dedaoBrainLine(memory, theme, pain, clean, careerMode);
+      const brainLine = dedaoBrainLine(memory, theme, pain, clean, careerMode, variant);
       const baseOpening = hookLine(formula, clean, theme, pain);
       const openingLead = /[。！？.!?]$/.test(baseOpening.trim()) ? baseOpening.trim() : `${{baseOpening.trim()}}。`;
       const opening = voice.hook || openingLead;
@@ -2961,6 +3032,8 @@ cd /Users/a001/Documents/抖音工作流
     async function renderIdeaPackage(index) {{
       const item = state.currentIdeas?.[index];
       if (!item) return;
+      const packageSeq = (state.ideaPackageSeq || 0) + 1;
+      state.ideaPackageSeq = packageSeq;
       $$('.idea-card').forEach((card, i)=>card.classList.toggle('active', i === index));
       $('#ideaPackage').innerHTML = '<div class="result muted">正在读取得到大脑记忆、成果和知识库，并生成标题 / 文字稿 / 封面...</div>';
       const itemHot = item.hot || selectedIdeaHot();
@@ -2969,6 +3042,7 @@ cd /Users/a001/Documents/抖音工作流
         `${{cleanTopic(item.topic)}} ${{item.theme}} ${{item.pain}} ${{itemHot?.title || ''}} ${{item.angle || ''}}`,
         8
       );
+      if (state.ideaPackageSeq !== packageSeq || state.currentIdeas?.[index] !== item) return;
       const pack = topicPackage(item);
       const packHotMeta = hotMetaLine(pack.hot);
       const packHotSummary = hotSummaryLine(pack.hot);
@@ -3059,6 +3133,8 @@ cd /Users/a001/Documents/抖音工作流
     }}
 
     async function generateIdeas() {{
+      const generationSeq = (state.ideaGenerationSeq || 0) + 1;
+      state.ideaGenerationSeq = generationSeq;
       const theme = selectedIdeaTheme();
       const pain = selectedIdeaPain();
       const count = Number($('#ideaCount').value);
@@ -3068,6 +3144,7 @@ cd /Users/a001/Documents/抖音工作流
       const careerMode = !aiSuperMode && isCareerTheme(theme, pain);
       const hot = selectedIdeaHot();
       const memory = await recallDedaoBrain('选题生成器', `${{theme}} ${{pain}} ${{hot?.title || ''}}`, 8);
+      if (state.ideaGenerationSeq !== generationSeq) return;
       const templates = aiSuperMode ? aiSuperTopicTemplates : careerMode ? careerTopicTemplates : topicTemplates;
       const rows = [];
       for (let i=0;i<count;i++) {{
