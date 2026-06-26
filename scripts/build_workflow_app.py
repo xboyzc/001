@@ -725,6 +725,7 @@ cd /Users/a001/Documents/抖音工作流
         .replace(/#[^\\s#]+/g, '')
         .replace(/[📌🔑✅⚠️]/g, '')
         .replace(/核心内容概览|核心工具模块|实战版|指南|方法论/g, '')
+        .replace(/[（(]\\s*[）)]/g, '')
         .replace(/\\s+/g, ' ')
         .trim();
       const parts = raw.split(/[。！？!?；;\\n]/).map(x=>x.trim()).filter(x=>x.length >= 10);
@@ -790,11 +791,33 @@ cd /Users/a001/Documents/抖音工作流
       const first = items[0];
       const second = items[1];
       const point = dedaoCleanPoint(first);
-      const support = second ? dedaoCleanPoint(second) : '';
+      const supportRaw = second ? dedaoCleanPoint(second) : '';
+      const support = supportRaw && supportRaw !== point ? supportRaw : '';
+      const themeName = theme.split('/')[0] || theme;
       if (careerMode) {{
-        return `这里有一个很关键的素材判断：${{point || '先把能力、对象和结果说清楚'}}。所以这一条不能只讲观点，要把用户能看见的入口、动作和结果一起讲出来。${{support ? `再补一句：${{support}}。` : ''}}`;
+        return `做${{themeName}}时，用户真正关心的不是你讲了多少方法，而是你能不能把「${{point || '能力、对象和结果'}}」变成他今天能看见的入口、动作和结果。${{support ? `这件事还可以继续往前推：${{support}}。` : ''}}`;
       }}
-      return `这里有一个很关键的素材判断：${{point || '先把问题放进真实场景，再给一个能马上做的小动作'}}。所以这一条不要停在道理上，要把场景、原因和今天能做的小动作讲清楚。${{support ? `再补一句：${{support}}。` : ''}}`;
+      return `真正能让人停下来的，不是一个很大的道理，而是「${{point || '把问题放进真实场景，再给一个能马上做的小动作'}}」。你把场景说具体，把原因说清楚，再给一个今天能做的小动作，用户才会觉得这条内容跟自己有关。${{support ? `这件事还可以继续往前推：${{support}}。` : ''}}`;
+    }}
+
+    function cleanTeleprompterScript(text) {{
+      return String(text || '')
+        .split(/\\n\\s*\\n/)
+        .map(part => part
+          .replace(/^\\s*先说(?:结论|结果)[：:，,]?\\s*/g, '')
+          .replace(/^\\s*这里有一个很关键的素材判断[：:]\\s*/g, '')
+          .replace(/^\\s*再补一句[：:]\\s*/g, '')
+          .replace(/^\\s*这里一定要补一个具体(?:例子|证据)[：:]\\s*/g, '')
+          .replace(/^\\s*你现在可以先这样做[：:]\\s*/g, '接下来只做三件事：')
+          .replace(/^\\s*很多人遇到「([^」]+)」这种问题，/g, '你可能也遇到过「$1」：')
+          .replace(/所以这一条(?:不能只讲观点|不要停在道理上)，要把[^。！？!?]+[。！？!?]?/g, '')
+          .replace(/例子一出来，[^。！？!?]+[。！？!?]?/g, '')
+          .replace(/不要只告诉别人你有方法，要让他看见/g, '你会看到')
+          .replace(/\\s+/g, ' ')
+          .trim())
+        .filter(Boolean)
+        .join('\\n\\n')
+        .trim();
     }}
 
     function dedaoTopicBase(theme, pain, memory, index) {{
@@ -2577,8 +2600,8 @@ cd /Users/a001/Documents/抖音工作流
       ];
       const generalProfiles = [
         {{
-          hook:`先说结果：做${{themeName}}，不要从大道理开始，先把「${{pain}}」放进一个具体场景里。`,
-          scene:`很多人遇到「${{clean}}」这种问题，第一反应是继续找方法，可真正卡住的往往不是方法少，而是不知道现在该先处理哪一个动作。`,
+          hook:`做${{themeName}}时，最怕的不是没想法，而是「${{pain}}」一直没有被放进具体场景里。`,
+          scene:`你可能也遇到过「${{clean}}」：第一反应是继续找方法，可真正卡住的往往不是方法少，而是不知道现在该先处理哪一个动作。`,
           conflict:`如果你只停在“我应该改变”，很容易越想越累。因为这句话太大了，大到你今天根本不知道从哪里下手。`,
           turn:`所以这一次别把问题讲大，直接把它缩到今天能发生的一件小事里。`,
           proof:`比如把「${{pain}}」换成一个画面：你正在犹豫、正在拖延、正在反复比较，或者正在因为一个选择迟迟不敢开始。画面一具体，行动才会跟上。`,
@@ -2649,7 +2672,7 @@ cd /Users/a001/Documents/抖音工作流
         '把它变成可执行流程，其实只需要三步'
       ];
       const generalMethodLeads = [
-        '你现在可以先这样做',
+        '接下来只做三件事',
         '这件事先不用做大，先做这三步',
         '今天就从一个小流程开始',
         '如果你想马上动起来，可以按这个顺序'
@@ -2770,7 +2793,7 @@ cd /Users/a001/Documents/抖音工作流
         `今天这段话，送给所有素材很多、工具很多，但发内容还是很乱的人。`
       ];
       const aiHotSource = hot?.source === '手动输入热点' ? '你输入的抖音热点' : '今天抖音热榜';
-      const aiHotSummary = hotSummary && !hotSummary.includes('手动输入') ? `可以顺手带一句：${{hotSummary}}。` : '';
+      const aiHotSummary = hotSummary && !hotSummary.includes('手动输入') ? `${{hotSummary}}。` : '';
       const hotLine = hotTitle
         ? `拿${{aiHotSource}}「${{hotTitle}}」举例。${{hotMeta ? `它现在是${{hotMeta}}。` : ''}}${{aiHotSummary}}你别急着把它塞进标题，先看它背后用户正在关心什么，再决定它能不能进入你的选题库。`
         : '';
@@ -2779,7 +2802,7 @@ cd /Users/a001/Documents/抖音工作流
         : '';
       const brainLine = dedaoBrainLine(memory, theme, pain, clean, true);
       const steps = plan.steps.map(step => String(step).replace(/^第[一二三四五六七八九十]+[，、]/, '').trim());
-      const script = [
+      const script = cleanTeleprompterScript([
         openings[variant % openings.length],
         hotLine,
         caseLine,
@@ -2793,7 +2816,7 @@ cd /Users/a001/Documents/抖音工作流
         `这也是 AI 超级个体和普通内容创作者最大的区别：别人是在每天临时找感觉，你是在让每一次采集、每一次生成、每一次发布，都回到同一套系统里继续生长。`,
         `当这套内容系统跑起来，选题会越来越准，文案会越来越像你，封面和标题也会越来越知道该承诺什么。到最后，你不是被热点推着走，而是能把热点、素材和旧作品，都变成你的下一条内容。`,
         `如果你也想把内容从混乱变成系统，评论区告诉我：你现在最卡的是素材、选题、文案，还是复盘？`
-      ].filter(Boolean).join('\\n\\n');
+      ].filter(Boolean).join('\\n\\n'));
       const titles = [
         clean,
         plan.title,
@@ -2837,10 +2860,10 @@ cd /Users/a001/Documents/抖音工作流
       const openingLead = /[。！？.!?]$/.test(baseOpening.trim()) ? baseOpening.trim() : `${{baseOpening.trim()}}。`;
       const opening = voice.hook || openingLead;
       const hotMetaText = hotMeta ? `它现在是${{hotMeta}}。` : '';
-      const hotSummaryText = hotSummary && !hotSummary.includes('手动输入') ? `可以顺手带一句：${{hotSummary}}。` : '';
+      const hotSummaryText = hotSummary && !hotSummary.includes('手动输入') ? `${{hotSummary}}。` : '';
       const evidenceLine = careerMode
-        ? `这里一定要补一个具体证据：${{plan.proof}}。不要只告诉别人你有方法，要让他看见这个方法放进真实场景以后，能解决哪一个具体卡点。`
-        : `这里一定要补一个具体例子：${{plan.proof}}。例子一出来，你就不用猜这句话到底怎么用，也更容易把它放回自己的生活里。`;
+        ? `${{plan.proof}}。你会看到，方法只有放进真实场景里，用户才知道它到底解决哪一个具体卡点。`
+        : `${{plan.proof}}。场景一具体，这句话就不再是道理，而是今天能直接照着做的一步。`;
       const actionLine = careerMode
         ? `你不用把所有能力一次讲完，先把眼前这个问题讲透。别人能听懂一个具体结果，才会愿意继续相信你后面的内容。`
         : `你不用等状态完全准备好，也不用一次做得很漂亮。今天先完成一个小动作，有了第一次反馈，下一步才会变得更清楚。`;
@@ -2902,7 +2925,7 @@ cd /Users/a001/Documents/抖音工作流
       const viralLine = viralCase
         ? `${{opening}} 真正能借鉴爆款的，不是照搬句子，而是把「${{clean}}」讲到当前用户的真实处境里。`
         : opening;
-      const script = careerMode
+      const script = cleanTeleprompterScript((careerMode
         ? [
             viralLine,
             hotLine,
@@ -2917,7 +2940,7 @@ cd /Users/a001/Documents/抖音工作流
             actionLine,
             hotTitle ? `「${{hotTitle}}」只是让人停下来的入口，真正让人留下来的，是你把「${{clean}}」讲得具体、讲得有用、讲得他能马上用上。` : `入口只是入口，真正让人留下来的，是你讲得具体、讲得有用、讲得他能马上用上。`,
             voice.close
-          ].filter(Boolean).join('\\n\\n')
+          ]
         : [
             viralLine,
             hotLine,
@@ -2931,7 +2954,7 @@ cd /Users/a001/Documents/抖音工作流
             voice.proof,
             actionLine,
             `最后我想问你一句：${{voice.close}}`
-          ].filter(Boolean).join('\\n\\n');
+          ]).filter(Boolean).join('\\n\\n'));
       return {{ title: clean, titles: titles.slice(0,4), cover, script, theme, pain, formula, viralCase, hot, memory }};
     }}
 
